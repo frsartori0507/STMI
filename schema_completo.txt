@@ -1,30 +1,45 @@
 
 ================================================================================
-ARQUIVO DE CONFIGURAÇÃO - MICROSOFT ACCESS
+RELATÓRIO DE CONFIGURAÇÃO - AMBIENTE DE REDE STMI
 ================================================================================
-CAMINHO OFICIAL: \\10.9.0.211\unidade tecnica\Sistema\BD_STMI.accdb
-APP INTERFACE: stmi-projetos.local
+LOCAL DO BANCO: \\10.9.0.211\unidade tecnica\Sistema\web\banco
+MÉTODO: SQL Server Production Sync (Idempotente)
 ================================================================================
 
-ESTRUTURA DE TABELAS RECOMENDADA (SQL):
+PASSO 1: SCRIPT DE AUTOMAÇÃO (OPCIONAL)
+---------------------------------------
+Crie um arquivo chamado "Sync_Banco.bat" na sua área de trabalho e cole o 
+seguinte código para mover o arquivo baixado automaticamente:
 
--- 1. Tabela: Tbl_Usuarios
-Campos: ID (PK), Nome, Avatar (Memo), Cargo, Login (Unique), Senha, Status, EhAdmin (Yes/No)
+@echo off
+set "origem=%USERPROFILE%\Downloads\STMI_SYNC_PRODUCAO.sql"
+set "destino=\\10.9.0.211\unidade tecnica\Sistema\web\banco\Sync_Atual.sql"
 
--- 2. Tabela: Tbl_Projetos
-Campos: ID (PK), Titulo, Descricao (Memo), Status, ID_Responsavel (FK), Endereco, Numero, Bairro, DataCriacao, DataAtualizacao
+if exist "%origem%" (
+    move /y "%origem%" "%destino%"
+    echo [OK] Script movido para o servidor de rede!
+) else (
+    echo [ERRO] Script nao encontrado na pasta Downloads.
+)
+pause
 
--- 3. Tabela: Tbl_Atividades
-Campos: ID (PK), ID_Projeto (FK), Titulo, Concluido (Yes/No), Estagio, DataConclusao
+PASSO 2: EXECUÇÃO NO SERVIDOR
+-----------------------------
+O arquivo gerado pelo App ("STMI_SYNC_PRODUCAO.sql") contém uma proteção de 
+transação (BEGIN TRANSACTION / COMMIT). Se houver qualquer erro durante a 
+sincronização, o banco de dados da rede não será afetado (Rollback automático).
 
--- 4. Tabela: Tbl_Comentarios
-Campos: ID (PK), ID_Projeto (FK), ID_Autor (FK), NomeAutor, Conteudo (Memo), DataHora
+LOGICA DE UPSERT:
+- Se o Projeto/Usuário NÃO existe no banco da rede: O script CRIA.
+- Se o Projeto/Usuário JÁ existe: O script ATUALIZA os campos alterados.
+- IDs de Projetos são preservados para garantir que links externos não quebrem.
 
--- 5. Tabela: Tbl_Agenda
-Campos: ID (PK), ID_Usuario (FK), Titulo, DataEvento, Tipo
+PASSO 3: SEGURANÇA DE REDE
+--------------------------
+Certifique-se de que o usuário logado na máquina tem permissão de "Escrita" e 
+"Modificação" na pasta: \\10.9.0.211\unidade tecnica\Sistema\web\banco.
 
-INSTRUÇÕES DE SINCRONIZAÇÃO:
-1. No App Web, clique em "Exportar Banco".
-2. Salve o arquivo .stmi na pasta: \\10.9.0.211\unidade tecnica\Sistema\Backups\
-3. No Access, utilize a função "Dados Externos" -> "Nova Fonte de Dados" -> "De Arquivo" -> "JSON" para atualizar as tabelas se necessário.
+Se o banco for SQL Server Express, você pode configurar o "SQL Server Agent" 
+para ler e executar esse script SQL automaticamente toda vez que ele for 
+atualizado na pasta de rede.
 ================================================================================
