@@ -6,30 +6,50 @@ const STORAGE_KEYS = {
   PROJECTS: 'stmi_projects_storage_v3',
   USERS: 'stmi_users_storage_v3',
   SESSION: 'stmi_session_storage_v3',
-  AGENDA: 'stmi_agenda_storage_v3'
+  AGENDA: 'stmi_agenda_storage_v3',
+  CLOUD_URL: 'stmi_cloud_url_v1'
 };
 
-// Auxiliar para garantir que datas sejam convertidas corretamente ao sair do JSON
 const parseDates = (data: any): any => {
   if (data === null || data === undefined) return data;
   if (typeof data === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(data)) {
     return new Date(data);
   }
-  if (Array.isArray(data)) {
-    return data.map(parseDates);
-  }
+  if (Array.isArray(data)) return data.map(parseDates);
   if (typeof data === 'object') {
     const obj: any = {};
-    for (const key in data) {
-      obj[key] = parseDates(data[key]);
-    }
+    for (const key in data) obj[key] = parseDates(data[key]);
     return obj;
   }
   return data;
 };
 
 export const db = {
-  // --- GERENCIAMENTO DE SESSÃO ---
+  // --- CONFIGURAÇÃO DE NUVEM ---
+  getCloudUrl(): string | null {
+    return localStorage.getItem(STORAGE_KEYS.CLOUD_URL);
+  },
+
+  setCloudUrl(url: string | null) {
+    if (url) localStorage.setItem(STORAGE_KEYS.CLOUD_URL, url);
+    else localStorage.removeItem(STORAGE_KEYS.CLOUD_URL);
+  },
+
+  async fetchFromCloud(): Promise<any> {
+    const url = this.getCloudUrl();
+    if (!url) return null;
+    try {
+      const response = await fetch(url + '?nocache=' + Date.now());
+      if (!response.ok) throw new Error('Falha ao acessar GitHub');
+      const data = await response.json();
+      return parseDates(data);
+    } catch (e) {
+      console.error("Erro Cloud Fetch:", e);
+      throw e;
+    }
+  },
+
+  // --- PERSISTÊNCIA ---
   async getSession(): Promise<User | null> {
     const sessionData = localStorage.getItem(STORAGE_KEYS.SESSION);
     if (!sessionData) return null;
@@ -39,12 +59,8 @@ export const db = {
         localStorage.removeItem(STORAGE_KEYS.SESSION);
         return null;
       }
-      const currentSignature = btoa(navigator.userAgent).substring(0, 24);
-      if (deviceSignature !== currentSignature) return null;
       return parseDates(user);
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   },
 
   async setSession(user: User, remember: boolean) {
@@ -57,23 +73,15 @@ export const db = {
     localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session));
   },
 
-  async clearSession() {
-    localStorage.removeItem(STORAGE_KEYS.SESSION);
-  },
+  async clearSession() { localStorage.removeItem(STORAGE_KEYS.SESSION); },
 
-  // --- USUÁRIOS ---
   async getUsers(): Promise<User[]> {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.USERS);
-      if (!saved) {
-        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
-        return INITIAL_USERS;
-      }
-      return parseDates(JSON.parse(saved));
-    } catch (e) {
-      console.error("Erro ao ler usuários:", e);
+    const saved = localStorage.getItem(STORAGE_KEYS.USERS);
+    if (!saved) {
+      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
       return INITIAL_USERS;
     }
+    return parseDates(JSON.parse(saved));
   },
 
   async saveUser(user: User): Promise<User> {
@@ -85,104 +93,72 @@ export const db = {
     return user;
   },
 
-  async deleteUser(id: string): Promise<void> {
+  async deleteUser(id: string) {
     const users = await this.getUsers();
-    const filtered = users.filter(u => u.id !== id);
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(filtered));
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users.filter(u => u.id !== id)));
   },
 
-  // --- AGENDA ---
   async getAgenda(): Promise<AgendaItem[]> {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.AGENDA);
-      if (!saved) return [];
-      return parseDates(JSON.parse(saved));
-    } catch (e) {
-      console.error("Erro ao ler agenda:", e);
-      return [];
-    }
+    const saved = localStorage.getItem(STORAGE_KEYS.AGENDA);
+    return saved ? parseDates(JSON.parse(saved)) : [];
   },
 
-  async saveAgendaItem(item: AgendaItem): Promise<AgendaItem> {
+  async saveAgendaItem(item: AgendaItem) {
     const agenda = await this.getAgenda();
     const index = agenda.findIndex(i => i.id === item.id);
-    let updatedAgenda = index >= 0 ? [...agenda] : [...agenda, item];
-    if (index >= 0) updatedAgenda[index] = item;
-    localStorage.setItem(STORAGE_KEYS.AGENDA, JSON.stringify(updatedAgenda));
+    let updated = index >= 0 ? [...agenda] : [...agenda, item];
+    if (index >= 0) updated[index] = item;
+    localStorage.setItem(STORAGE_KEYS.AGENDA, JSON.stringify(updated));
     return item;
   },
 
-  async deleteAgendaItem(id: string): Promise<void> {
+  async deleteAgendaItem(id: string) {
     const agenda = await this.getAgenda();
-    const filtered = agenda.filter(i => i.id !== id);
-    localStorage.setItem(STORAGE_KEYS.AGENDA, JSON.stringify(filtered));
+    localStorage.setItem(STORAGE_KEYS.AGENDA, JSON.stringify(agenda.filter(i => i.id !== id)));
   },
 
-  // --- PROJETOS ---
   async getProjects(): Promise<Project[]> {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
-      if (!saved) {
-        localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(INITIAL_PROJECTS));
-        return INITIAL_PROJECTS;
-      }
-      return parseDates(JSON.parse(saved));
-    } catch (e) {
-      console.error("Erro ao ler projetos:", e);
+    const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
+    if (!saved) {
+      localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(INITIAL_PROJECTS));
       return INITIAL_PROJECTS;
     }
+    return parseDates(JSON.parse(saved));
   },
 
   async saveProject(project: Project): Promise<Project> {
     const projects = await this.getProjects();
     const index = projects.findIndex(p => p.id === project.id);
-    
-    // Garantir que estamos salvando objetos limpos e com datas tratadas internamente pelo stringify
-    const projectToSave = {
-      ...project,
-      updatedAt: new Date()
-    };
-
-    let updatedProjects;
-    if (index >= 0) {
-      updatedProjects = [...projects];
-      updatedProjects[index] = projectToSave;
-    } else {
-      updatedProjects = [projectToSave, ...projects];
-    }
-    
-    localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(updatedProjects));
+    const projectToSave = { ...project, updatedAt: new Date() };
+    let updated = index >= 0 ? [...projects] : [projectToSave, ...projects];
+    if (index >= 0) updated[index] = projectToSave;
+    localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(updated));
     return projectToSave;
   },
 
-  // --- BACKUP ---
   async exportData() {
     const data = {
       users: await this.getUsers(),
       projects: await this.getProjects(),
       agenda: await this.getAgenda(),
-      exportedAt: new Date().toISOString(),
-      source: "STMI Projetos v3"
+      exportedAt: new Date().toISOString()
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `STMI_BKP_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `BD_PROJETOS_STMI.json`;
     a.click();
     URL.revokeObjectURL(url);
   },
 
-  async importData(jsonData: string) {
+  async importData(jsonData: string | object) {
     try {
-      const parsed = JSON.parse(jsonData);
+      const parsed: any = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
       if (parsed.users) localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(parsed.users));
       if (parsed.projects) localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(parsed.projects));
       if (parsed.agenda) localStorage.setItem(STORAGE_KEYS.AGENDA, JSON.stringify(parsed.agenda));
-      alert("Dados importados com sucesso! O sistema será reiniciado.");
-      window.location.reload();
-    } catch (e) {
-      alert("Erro ao importar: Arquivo de backup corrompido ou inválido.");
-    }
+      return true;
+    } catch (e) { return false; }
   }
 };
