@@ -1,0 +1,72 @@
+
+export enum ProjectStatus {
+  BACKLOG = 'BACKLOG',
+  IN_PROGRESS = 'EM ANDAMENTO',
+  REVIEW = 'REVISÃO',
+  COMPLETED = 'CONCLUÍDO'
+}
+
+export enum TaskStage {
+  SURVEY = 'LEVANTAMENTO',
+  PLANNING = 'PLANEJAMENTO',
+  EXECUTION = 'EXECUÇÃO',
+  FINALIZATION = 'FINALIZAÇÃO'
+}
+
+export type UserStatus = 'ATIVO' | 'BLOQUEADO';
+
+export interface User {
+  id: string;
+  name: string;
+  avatar: string;
+  role: string;
+  email?: string;
+  username: string;
+  password?: string;
+  status: UserStatus;
+  isAdmin?: boolean;
+}
+
+export interface Comment {
+  id: string;
+  projectId: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  timestamp: Date;
+  targetUserId?: string;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  completed: boolean;
+  stage: TaskStage;
+  responsibleId?: string;
+  completedAt?: Date;
+  observation?: string;
+}
+
+export interface Project {
+  id: string;
+  title: string;
+  description: string;
+  responsibleId: string;
+  assignedUserIds: string[];
+  status: ProjectStatus;
+  tasks: Task[];
+  comments: Comment[];
+  createdAt: Date;
+  updatedAt: Date;
+  address?: string;
+  number?: string;
+  neighborhood?: string;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  timestamp: Date;
+  read: boolean;
+}

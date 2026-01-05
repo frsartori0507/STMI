@@ -1,0 +1,68 @@
+
+================================================================================
+ESTRUTURA SQL PARA CRIAÇÃO DO BANCO - PROJETOS STMI
+ARQUIVO: BD_Projetos.db
+================================================================================
+
+-- 1. Tabela de Usuários (Equipe e Acesso)
+CREATE TABLE users (
+    id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    avatar TEXT,
+    role VARCHAR(50),
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password VARCHAR(100) NOT NULL,
+    status VARCHAR(20) DEFAULT 'ATIVO', -- ATIVO ou BLOQUEADO
+    is_admin BOOLEAN DEFAULT FALSE,
+    email VARCHAR(100)
+);
+
+-- 2. Tabela de Projetos
+CREATE TABLE projects (
+    id VARCHAR(50) PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,
+    description TEXT,
+    status VARCHAR(20) DEFAULT 'BACKLOG',
+    responsible_id VARCHAR(50),
+    address VARCHAR(255),
+    number VARCHAR(20),
+    neighborhood VARCHAR(100),
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    FOREIGN KEY (responsible_id) REFERENCES users(id)
+);
+
+-- 3. Tabela de Atividades (Tasks)
+CREATE TABLE tasks (
+    id VARCHAR(50) PRIMARY KEY,
+    project_id VARCHAR(50),
+    title VARCHAR(255) NOT NULL,
+    completed BOOLEAN DEFAULT FALSE,
+    responsible_id VARCHAR(50),
+    completed_at TIMESTAMP,
+    observation TEXT,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (responsible_id) REFERENCES users(id)
+);
+
+-- 4. Tabela de Comentários (Chat)
+CREATE TABLE comments (
+    id VARCHAR(50) PRIMARY KEY,
+    project_id VARCHAR(50),
+    author_id VARCHAR(50),
+    content TEXT NOT NULL,
+    target_user_id VARCHAR(50),
+    timestamp TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (author_id) REFERENCES users(id),
+    FOREIGN KEY (target_user_id) REFERENCES users(id)
+);
+
+-- INSERIR ADMINISTRADOR PADRÃO
+INSERT INTO users (id, name, avatar, role, username, password, status, is_admin)
+VALUES ('admin', 'Administrador STMI', 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin', 'Administrador', 'admin', '123', 'ATIVO', TRUE);
+
+================================================================================
+LOCALIZAÇÃO SUGERIDA: 
+C:\Users\fabio\Desktop\Projetos\BD_Projetos.db
+================================================================================

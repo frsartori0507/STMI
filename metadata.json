@@ -1,0 +1,7 @@
+{
+  "name": "Secretaria de Transporte, Mobilidade e Infraestrutura",
+  "description": "A collaborative project management and team communication application with real-time updates and AI-powered project insights.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
