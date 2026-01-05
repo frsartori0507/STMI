@@ -20,7 +20,6 @@ export interface User {
   name: string;
   avatar: string;
   role: string;
-  email?: string;
   username: string;
   password?: string;
   status: UserStatus;
@@ -31,7 +30,8 @@ export interface AgendaItem {
   id: string;
   userId: string;
   title: string;
-  description: string;
+  // Fix: Added optional description field to resolve error in AgendaCalendar.tsx
+  description?: string;
   date: Date;
   type: 'REUNIAO' | 'VISITA' | 'ENTREGA' | 'OUTRO';
 }
@@ -51,9 +51,9 @@ export interface Task {
   title: string;
   completed: boolean;
   stage: TaskStage;
+  // Fix: Added missing responsibleId and completedAt fields to resolve errors in initialData.ts
   responsibleId?: string;
   completedAt?: Date;
-  observation?: string;
 }
 
 export interface Project {
@@ -68,6 +68,7 @@ export interface Project {
   createdAt: Date;
   updatedAt: Date;
   address?: string;
+  // Fix: Added missing number and neighborhood fields to resolve errors in ProjectModal.tsx
   number?: string;
   neighborhood?: string;
 }

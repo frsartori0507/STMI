@@ -1,115 +1,110 @@
 
-import { Project, User, AgendaItem } from '../types';
-import { INITIAL_USERS, INITIAL_PROJECTS } from './initialData';
+import { Project, User, AgendaItem, ProjectStatus, TaskStage } from '../types';
 
 const STORAGE_KEYS = {
-  PROJECTS: 'stmi_projects_storage_v3',
-  USERS: 'stmi_users_storage_v3',
-  SESSION: 'stmi_session_storage_v3',
-  AGENDA: 'stmi_agenda_storage_v3',
-  CLOUD_URL: 'stmi_cloud_url_v1'
+  PROJECTS: 'stmi_v5_projects',
+  USERS: 'stmi_v5_users',
+  SESSION: 'stmi_v5_session',
+  AGENDA: 'stmi_v5_agenda',
+  DB_PATH: 'stmi_v5_db_path'
 };
 
-const parseDates = (data: any): any => {
-  if (data === null || data === undefined) return data;
-  if (typeof data === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(data)) {
-    return new Date(data);
+const DEFAULT_PATH = '\\\\10.9.0.211\\unidade tecnica\\Sistema\\BD_STMI.accdb';
+
+const INITIAL_USERS: User[] = [
+  {
+    id: 'admin',
+    name: 'Administrador STMI',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
+    role: 'Coordenador',
+    username: 'admin',
+    password: '123',
+    status: 'ATIVO',
+    isAdmin: true
   }
-  if (Array.isArray(data)) return data.map(parseDates);
+];
+
+const hydrate = (data: any): any => {
+  if (data === null || data === undefined) return data;
+  if (typeof data === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(data)) return new Date(data);
+  if (Array.isArray(data)) return data.map(hydrate);
   if (typeof data === 'object') {
     const obj: any = {};
-    for (const key in data) obj[key] = parseDates(data[key]);
+    for (const key in data) obj[key] = hydrate(data[key]);
     return obj;
   }
   return data;
 };
 
 export const db = {
-  // --- CONFIGURAÇÃO DE NUVEM ---
-  getCloudUrl(): string | null {
-    return localStorage.getItem(STORAGE_KEYS.CLOUD_URL);
+  getDbPath(): string {
+    return localStorage.getItem(STORAGE_KEYS.DB_PATH) || DEFAULT_PATH;
   },
 
-  setCloudUrl(url: string | null) {
-    if (url) localStorage.setItem(STORAGE_KEYS.CLOUD_URL, url);
-    else localStorage.removeItem(STORAGE_KEYS.CLOUD_URL);
+  setDbPath(path: string) {
+    localStorage.setItem(STORAGE_KEYS.DB_PATH, path);
   },
 
-  async fetchFromCloud(): Promise<any> {
-    const url = this.getCloudUrl();
-    if (!url) return null;
-    try {
-      const response = await fetch(url + '?nocache=' + Date.now());
-      if (!response.ok) throw new Error('Falha ao acessar GitHub');
-      const data = await response.json();
-      return parseDates(data);
-    } catch (e) {
-      console.error("Erro Cloud Fetch:", e);
-      throw e;
-    }
-  },
-
-  // --- PERSISTÊNCIA ---
   async getSession(): Promise<User | null> {
-    const sessionData = localStorage.getItem(STORAGE_KEYS.SESSION);
-    if (!sessionData) return null;
-    try {
-      const { user, expires, deviceSignature } = JSON.parse(sessionData);
-      if (new Date().getTime() > expires) {
-        localStorage.removeItem(STORAGE_KEYS.SESSION);
-        return null;
-      }
-      return parseDates(user);
-    } catch (e) { return null; }
+    const raw = localStorage.getItem(STORAGE_KEYS.SESSION);
+    if (!raw) return null;
+    const { user, expires } = JSON.parse(raw);
+    if (Date.now() > expires) {
+      localStorage.removeItem(STORAGE_KEYS.SESSION);
+      return null;
+    }
+    return hydrate(user);
   },
 
   async setSession(user: User, remember: boolean) {
-    const duration = remember ? 30 * 24 * 60 * 60 * 1000 : 4 * 60 * 60 * 1000;
-    const session = {
-      user,
-      expires: new Date().getTime() + duration,
-      deviceSignature: btoa(navigator.userAgent).substring(0, 24)
-    };
-    localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session));
+    const expires = Date.now() + (remember ? 30 : 1) * 24 * 60 * 60 * 1000;
+    localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify({ user, expires }));
   },
 
   async clearSession() { localStorage.removeItem(STORAGE_KEYS.SESSION); },
 
   async getUsers(): Promise<User[]> {
-    const saved = localStorage.getItem(STORAGE_KEYS.USERS);
-    if (!saved) {
+    const raw = localStorage.getItem(STORAGE_KEYS.USERS);
+    if (!raw) {
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
       return INITIAL_USERS;
     }
-    return parseDates(JSON.parse(saved));
+    return hydrate(JSON.parse(raw));
   },
 
-  async saveUser(user: User): Promise<User> {
+  async saveUser(user: User) {
     const users = await this.getUsers();
-    const index = users.findIndex(u => u.id === user.id);
-    let updatedUsers = index >= 0 ? [...users] : [...users, user];
-    if (index >= 0) updatedUsers[index] = user;
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
-    return user;
+    const updated = users.some(u => u.id === user.id) ? users.map(u => u.id === user.id ? user : u) : [...users, user];
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updated));
   },
 
-  async deleteUser(id: string) {
-    const users = await this.getUsers();
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users.filter(u => u.id !== id)));
+  async getProjects(): Promise<Project[]> {
+    const raw = localStorage.getItem(STORAGE_KEYS.PROJECTS);
+    return raw ? hydrate(JSON.parse(raw)) : [];
+  },
+
+  async saveProject(project: Project) {
+    const projects = await this.getProjects();
+    const toSave = { ...project, updatedAt: new Date() };
+    const updated = projects.some(p => p.id === project.id) ? projects.map(p => p.id === project.id ? toSave : p) : [toSave, ...projects];
+    localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(updated));
+    return toSave;
+  },
+
+  async deleteProject(id: string) {
+    const projects = await this.getProjects();
+    localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects.filter(p => p.id !== id)));
   },
 
   async getAgenda(): Promise<AgendaItem[]> {
-    const saved = localStorage.getItem(STORAGE_KEYS.AGENDA);
-    return saved ? parseDates(JSON.parse(saved)) : [];
+    const raw = localStorage.getItem(STORAGE_KEYS.AGENDA);
+    return raw ? hydrate(JSON.parse(raw)) : [];
   },
 
   async saveAgendaItem(item: AgendaItem) {
     const agenda = await this.getAgenda();
-    const index = agenda.findIndex(i => i.id === item.id);
-    let updated = index >= 0 ? [...agenda] : [...agenda, item];
-    if (index >= 0) updated[index] = item;
+    const updated = [...agenda.filter(i => i.id !== item.id), item];
     localStorage.setItem(STORAGE_KEYS.AGENDA, JSON.stringify(updated));
-    return item;
   },
 
   async deleteAgendaItem(id: string) {
@@ -117,48 +112,38 @@ export const db = {
     localStorage.setItem(STORAGE_KEYS.AGENDA, JSON.stringify(agenda.filter(i => i.id !== id)));
   },
 
-  async getProjects(): Promise<Project[]> {
-    const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
-    if (!saved) {
-      localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(INITIAL_PROJECTS));
-      return INITIAL_PROJECTS;
-    }
-    return parseDates(JSON.parse(saved));
-  },
-
-  async saveProject(project: Project): Promise<Project> {
-    const projects = await this.getProjects();
-    const index = projects.findIndex(p => p.id === project.id);
-    const projectToSave = { ...project, updatedAt: new Date() };
-    let updated = index >= 0 ? [...projects] : [projectToSave, ...projects];
-    if (index >= 0) updated[index] = projectToSave;
-    localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(updated));
-    return projectToSave;
-  },
-
-  async exportData() {
+  exportDatabase() {
     const data = {
-      users: await this.getUsers(),
-      projects: await this.getProjects(),
-      agenda: await this.getAgenda(),
-      exportedAt: new Date().toISOString()
+      projects: JSON.parse(localStorage.getItem(STORAGE_KEYS.PROJECTS) || '[]'),
+      users: JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]'),
+      agenda: JSON.parse(localStorage.getItem(STORAGE_KEYS.AGENDA) || '[]'),
+      exportedAt: new Date().toISOString(),
+      networkPath: this.getDbPath()
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `BD_PROJETOS_STMI.json`;
+    a.download = `STMI_DATA_SYNC.stmi`;
     a.click();
     URL.revokeObjectURL(url);
   },
 
-  async importData(jsonData: string | object) {
-    try {
-      const parsed: any = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
-      if (parsed.users) localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(parsed.users));
-      if (parsed.projects) localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(parsed.projects));
-      if (parsed.agenda) localStorage.setItem(STORAGE_KEYS.AGENDA, JSON.stringify(parsed.agenda));
-      return true;
-    } catch (e) { return false; }
+  async importDatabase(file: File): Promise<boolean> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target?.result as string);
+          if (data.projects) localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(data.projects));
+          if (data.users) localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(data.users));
+          if (data.agenda) localStorage.setItem(STORAGE_KEYS.AGENDA, JSON.stringify(data.agenda));
+          resolve(true);
+        } catch (err) {
+          resolve(false);
+        }
+      };
+      reader.readAsText(file);
+    });
   }
 };
