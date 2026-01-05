@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Project, ProjectStatus, Notification, Comment, Task, User, TaskStage } from './types';
+import { Project, ProjectStatus, Notification, Comment, Task, User, TaskStage, AgendaItem } from './types';
 import { STATUS_COLORS, STAGE_WEIGHTS, STAGE_COLORS } from './constants';
 import ProjectCard from './components/ProjectCard';
 import ProjectModal from './components/ProjectModal';
 import UserModal from './components/UserModal';
 import LoginScreen from './components/LoginScreen';
+import AgendaCalendar from './components/AgendaCalendar';
 import { getProjectInsights } from './services/geminiService';
 import { db } from './services/db';
 
@@ -14,7 +15,9 @@ const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [agenda, setAgenda] = useState<AgendaItem[]>([]);
   const [dbStatus, setDbStatus] = useState<'CONNECTED' | 'SYNCING' | 'SAVED'>('CONNECTED');
+  const [activeView, setActiveView] = useState<'PROJECTS' | 'CALENDAR'>('PROJECTS');
   
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
@@ -60,13 +63,14 @@ const App: React.FC = () => {
     const loadData = async () => {
       setDbStatus('SYNCING');
       try {
-        await new Promise(resolve => setTimeout(resolve, 800));
-        const [allUsers, allProjects] = await Promise.all([
+        const [allUsers, allProjects, allAgenda] = await Promise.all([
           db.getUsers(),
-          db.getProjects()
+          db.getProjects(),
+          db.getAgenda()
         ]);
         setUsers(allUsers);
         setProjects(allProjects);
+        setAgenda(allAgenda);
       } finally {
         setIsInitializing(false);
         setDbStatus('CONNECTED');
@@ -89,7 +93,7 @@ const App: React.FC = () => {
 
   const notify = useCallback((title: string, message: string) => {
     const newNotification: Notification = {
-      id: Date.now().toString(),
+      id: Math.random().toString(36).substr(2, 9),
       title,
       message,
       timestamp: new Date(),
@@ -101,15 +105,17 @@ const App: React.FC = () => {
   const updateProjectInDB = async (updated: Project) => {
     setDbStatus('SYNCING');
     try {
-      await db.saveProject(updated);
-      setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
-      if (selectedProject?.id === updated.id) {
-        setSelectedProject(updated);
+      const saved = await db.saveProject(updated);
+      setProjects(prev => prev.map(p => p.id === saved.id ? saved : p));
+      if (selectedProject?.id === saved.id) {
+        setSelectedProject(saved);
       }
       setDbStatus('SAVED');
-      setTimeout(() => setDbStatus('CONNECTED'), 2000);
+      setTimeout(() => setDbStatus('CONNECTED'), 1500);
     } catch (e) {
+      console.error("Erro ao salvar projeto:", e);
       setDbStatus('CONNECTED');
+      alert("Erro ao sincronizar dados. Tente novamente.");
     }
   };
 
@@ -117,8 +123,7 @@ const App: React.FC = () => {
     if (!selectedProject) return;
     const updated = { 
       ...selectedProject, 
-      status: newStatus, 
-      updatedAt: new Date() 
+      status: newStatus
     };
     updateProjectInDB(updated);
     notify('Status Alterado', `O projeto "${updated.title}" foi movido para ${newStatus}.`);
@@ -128,7 +133,7 @@ const App: React.FC = () => {
     e.preventDefault();
     if (!selectedProject || !newTaskTitle.trim()) return;
     const newTask: Task = {
-      id: Date.now().toString(),
+      id: Math.random().toString(36).substr(2, 9),
       title: newTaskTitle,
       completed: false,
       stage: newTaskStage,
@@ -136,8 +141,7 @@ const App: React.FC = () => {
     };
     const updated = {
       ...selectedProject,
-      tasks: [...selectedProject.tasks, newTask],
-      updatedAt: new Date()
+      tasks: [...selectedProject.tasks, newTask]
     };
     updateProjectInDB(updated);
     setNewTaskTitle('');
@@ -147,7 +151,7 @@ const App: React.FC = () => {
   const handleAddComment = () => {
     if (!selectedProject || !newComment.trim() || !currentUser) return;
     const comment: Comment = {
-      id: Date.now().toString(),
+      id: Math.random().toString(36).substr(2, 9),
       projectId: selectedProject.id,
       authorId: currentUser.id,
       authorName: currentUser.name,
@@ -157,8 +161,7 @@ const App: React.FC = () => {
     };
     const updated = { 
       ...selectedProject, 
-      comments: [...selectedProject.comments, comment],
-      updatedAt: new Date() 
+      comments: [...selectedProject.comments, comment]
     };
     updateProjectInDB(updated);
     setNewComment('');
@@ -177,7 +180,7 @@ const App: React.FC = () => {
       }
       return t;
     });
-    const updated = { ...selectedProject, tasks: updatedTasks, updatedAt: new Date() };
+    const updated = { ...selectedProject, tasks: updatedTasks };
     updateProjectInDB(updated);
   };
 
@@ -191,19 +194,19 @@ const App: React.FC = () => {
       } else {
         projectToSave = {
           ...data as Project,
-          id: Date.now().toString(),
+          id: Math.random().toString(36).substr(2, 9),
           tasks: [],
           comments: [],
           createdAt: new Date(),
           updatedAt: new Date()
         };
       }
-      await db.saveProject(projectToSave);
+      const saved = await db.saveProject(projectToSave);
       const allProjects = await db.getProjects();
       setProjects(allProjects);
-      if (selectedProject?.id === projectToSave.id) setSelectedProject(projectToSave);
+      if (selectedProject?.id === saved.id) setSelectedProject(saved);
       setDbStatus('SAVED');
-      setTimeout(() => setDbStatus('CONNECTED'), 2000);
+      setTimeout(() => setDbStatus('CONNECTED'), 1500);
     } catch (e) {
       setDbStatus('CONNECTED');
     }
@@ -215,7 +218,7 @@ const App: React.FC = () => {
     const allUsers = await db.getUsers();
     setUsers(allUsers);
     setDbStatus('SAVED');
-    setTimeout(() => setDbStatus('CONNECTED'), 2000);
+    setTimeout(() => setDbStatus('CONNECTED'), 1500);
     notify('Equipe Atualizada', `Membro ${user.name} salvo.`);
   };
 
@@ -226,9 +229,28 @@ const App: React.FC = () => {
       const allUsers = await db.getUsers();
       setUsers(allUsers);
       setDbStatus('SAVED');
-      setTimeout(() => setDbStatus('CONNECTED'), 2000);
+      setTimeout(() => setDbStatus('CONNECTED'), 1500);
       notify('Membro Removido', `${userName} não faz mais parte da equipe.`);
     }
+  };
+
+  const handleSaveAgendaItem = async (item: AgendaItem) => {
+    setDbStatus('SYNCING');
+    await db.saveAgendaItem(item);
+    const allAgenda = await db.getAgenda();
+    setAgenda(allAgenda);
+    setDbStatus('SAVED');
+    setTimeout(() => setDbStatus('CONNECTED'), 1500);
+    notify('Agenda Atualizada', `Compromisso "${item.title}" agendado.`);
+  };
+
+  const handleDeleteAgendaItem = async (id: string) => {
+    setDbStatus('SYNCING');
+    await db.deleteAgendaItem(id);
+    const allAgenda = await db.getAgenda();
+    setAgenda(allAgenda);
+    setDbStatus('SAVED');
+    setTimeout(() => setDbStatus('CONNECTED'), 1500);
   };
 
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -286,18 +308,28 @@ const App: React.FC = () => {
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
             </div>
-            <div className={`px-3 py-2 rounded-lg flex items-center gap-2 border transition-all duration-500 ${dbStatus === 'SAVED' ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-100 border-slate-200'}`}>
-              <div className={`w-2.5 h-2.5 rounded-full ${dbStatus === 'CONNECTED' ? 'bg-blue-500' : dbStatus === 'SYNCING' ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]'}`}></div>
-              <span className={`text-[10px] font-black uppercase tracking-widest truncate ${dbStatus === 'SAVED' ? 'text-emerald-700' : 'text-slate-500'}`}>
-                {dbStatus === 'SAVED' ? 'DADOS SINCRONIZADOS' : 'BD_PROJETOS.DB CONECTADO'}
+            <div className={`px-3 py-2 rounded-lg flex items-center gap-2 border transition-all duration-500 ${dbStatus === 'SAVED' ? 'bg-emerald-50 border-emerald-200 shadow-sm' : 'bg-slate-50 border-slate-200'}`}>
+              <div className={`w-2 h-2 rounded-full ${dbStatus === 'CONNECTED' ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : dbStatus === 'SYNCING' ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]'}`}></div>
+              <span className={`text-[9px] font-black uppercase tracking-widest truncate ${dbStatus === 'SAVED' ? 'text-emerald-700' : 'text-slate-500'}`}>
+                {dbStatus === 'SAVED' ? 'DADOS GRAVADOS' : dbStatus === 'SYNCING' ? 'SINCRONIZANDO...' : 'BANCO DE DADOS LOCAL'}
               </span>
             </div>
           </div>
           
           <nav className="space-y-1.5">
-            <button onClick={() => { setSelectedProject(null); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${!selectedProject ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <button 
+              onClick={() => { setSelectedProject(null); setActiveView('PROJECTS'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} 
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${!selectedProject && activeView === 'PROJECTS' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+            >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
               Dashboard
+            </button>
+            <button 
+              onClick={() => { setSelectedProject(null); setActiveView('CALENDAR'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} 
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${activeView === 'CALENDAR' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              Calendário / Agenda
             </button>
             {currentUser.isAdmin && (
               <button onClick={() => { setEditingUser(null); setIsUserModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-slate-500 hover:bg-slate-50 hover:text-blue-600 rounded-xl font-bold text-sm transition-all">
@@ -313,15 +345,15 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex-1 overflow-y-auto p-6 min-w-[20rem]">
-          <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-5">Gestão de Dados</h2>
+          <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-5">Segurança dos Dados</h2>
           <div className="space-y-2 mb-8">
              <button onClick={() => db.exportData()} className="w-full flex items-center gap-3 px-4 py-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-[10px] font-black uppercase text-slate-600 tracking-wider transition-all border border-slate-200">
                <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-               Exportar Backup
+               Gerar Backup (JSON)
              </button>
              <label className="w-full flex items-center gap-3 px-4 py-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-[10px] font-black uppercase text-slate-600 tracking-wider transition-all border border-slate-200 cursor-pointer">
-               <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12"/></svg>
-               Importar Dados
+               <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4-4m4-4v12"/></svg>
+               Restaurar Backup
                <input type="file" accept=".json" onChange={handleImportBackup} className="hidden" />
              </label>
           </div>
@@ -372,16 +404,18 @@ const App: React.FC = () => {
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
             </button>
             <h2 className="text-sm lg:text-lg font-black text-slate-800 tracking-tight truncate max-w-[150px] sm:max-w-none">
-              {selectedProject ? selectedProject.title : 'Dashboard Geral'}
+              {selectedProject ? selectedProject.title : activeView === 'PROJECTS' ? 'Dashboard Geral' : 'Agenda de Equipe'}
             </h2>
           </div>
           
           <div className="flex gap-2">
-            <button onClick={() => { setEditingProject(null); setIsProjectModalOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-5 py-2 rounded-xl font-bold text-xs sm:text-sm shadow-lg shadow-blue-100 transition-all flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
-              <span className="hidden sm:inline">Novo Projeto</span>
-              <span className="sm:hidden">Novo</span>
-            </button>
+            {activeView === 'PROJECTS' && (
+               <button onClick={() => { setEditingProject(null); setIsProjectModalOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-5 py-2 rounded-xl font-bold text-xs sm:text-sm shadow-lg shadow-blue-100 transition-all flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
+                <span className="hidden sm:inline">Novo Projeto</span>
+                <span className="sm:hidden">Novo</span>
+              </button>
+            )}
           </div>
         </header>
 
@@ -436,7 +470,7 @@ const App: React.FC = () => {
                           <div key={stage} className="space-y-3">
                             <div className="flex items-center justify-between px-2">
                               <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-[0.2em] flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full ${stageTasks.length > 0 && completedCount === stageTasks.length ? 'bg-emerald-500' : 'bg-blue-400'}`}></span>
+                                <span className={`w-2 h-2 rounded-full ${stageTasks.length > 0 && completedCount === stageTasks.length ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-blue-400'}`}></span>
                                 {stage} 
                                 <span className="text-slate-300 ml-1">({Math.round(STAGE_WEIGHTS[stage]*100)}% do Projeto)</span>
                               </h4>
@@ -533,6 +567,16 @@ const App: React.FC = () => {
                 </div>
               </div>
             </div>
+          ) : activeView === 'CALENDAR' ? (
+             <div className="max-w-7xl mx-auto h-[calc(100vh-14rem)]">
+                <AgendaCalendar 
+                  currentUser={currentUser} 
+                  users={users} 
+                  agenda={agenda}
+                  onSaveItem={handleSaveAgendaItem}
+                  onDeleteItem={handleDeleteAgendaItem}
+                />
+             </div>
           ) : (
             <div className="max-w-7xl mx-auto space-y-8 pb-10">
               <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 lg:gap-6">

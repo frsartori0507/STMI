@@ -27,6 +27,15 @@ export interface User {
   isAdmin?: boolean;
 }
 
+export interface AgendaItem {
+  id: string;
+  userId: string;
+  title: string;
+  description: string;
+  date: Date;
+  type: 'REUNIAO' | 'VISITA' | 'ENTREGA' | 'OUTRO';
+}
+
 export interface Comment {
   id: string;
   projectId: string;

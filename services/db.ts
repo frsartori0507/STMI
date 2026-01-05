@@ -1,11 +1,31 @@
 
-import { Project, User } from '../types';
+import { Project, User, AgendaItem } from '../types';
 import { INITIAL_USERS, INITIAL_PROJECTS } from './initialData';
 
 const STORAGE_KEYS = {
-  PROJECTS: 'prosync_projects_v2',
-  USERS: 'prosync_users_v2',
-  SESSION: 'prosync_session_v3'
+  PROJECTS: 'stmi_projects_storage_v3',
+  USERS: 'stmi_users_storage_v3',
+  SESSION: 'stmi_session_storage_v3',
+  AGENDA: 'stmi_agenda_storage_v3'
+};
+
+// Auxiliar para garantir que datas sejam convertidas corretamente ao sair do JSON
+const parseDates = (data: any): any => {
+  if (data === null || data === undefined) return data;
+  if (typeof data === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(data)) {
+    return new Date(data);
+  }
+  if (Array.isArray(data)) {
+    return data.map(parseDates);
+  }
+  if (typeof data === 'object') {
+    const obj: any = {};
+    for (const key in data) {
+      obj[key] = parseDates(data[key]);
+    }
+    return obj;
+  }
+  return data;
 };
 
 export const db = {
@@ -21,7 +41,7 @@ export const db = {
       }
       const currentSignature = btoa(navigator.userAgent).substring(0, 24);
       if (deviceSignature !== currentSignature) return null;
-      return user;
+      return parseDates(user);
     } catch (e) {
       return null;
     }
@@ -46,12 +66,12 @@ export const db = {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.USERS);
       if (!saved) {
-        // Inicializa com dados do arquivo initialData.ts
         localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
         return INITIAL_USERS;
       }
-      return JSON.parse(saved);
+      return parseDates(JSON.parse(saved));
     } catch (e) {
+      console.error("Erro ao ler usuários:", e);
       return INITIAL_USERS;
     }
   },
@@ -71,31 +91,44 @@ export const db = {
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(filtered));
   },
 
+  // --- AGENDA ---
+  async getAgenda(): Promise<AgendaItem[]> {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.AGENDA);
+      if (!saved) return [];
+      return parseDates(JSON.parse(saved));
+    } catch (e) {
+      console.error("Erro ao ler agenda:", e);
+      return [];
+    }
+  },
+
+  async saveAgendaItem(item: AgendaItem): Promise<AgendaItem> {
+    const agenda = await this.getAgenda();
+    const index = agenda.findIndex(i => i.id === item.id);
+    let updatedAgenda = index >= 0 ? [...agenda] : [...agenda, item];
+    if (index >= 0) updatedAgenda[index] = item;
+    localStorage.setItem(STORAGE_KEYS.AGENDA, JSON.stringify(updatedAgenda));
+    return item;
+  },
+
+  async deleteAgendaItem(id: string): Promise<void> {
+    const agenda = await this.getAgenda();
+    const filtered = agenda.filter(i => i.id !== id);
+    localStorage.setItem(STORAGE_KEYS.AGENDA, JSON.stringify(filtered));
+  },
+
   // --- PROJETOS ---
   async getProjects(): Promise<Project[]> {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
       if (!saved) {
-        // Inicializa com dados do arquivo initialData.ts
         localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(INITIAL_PROJECTS));
         return INITIAL_PROJECTS;
       }
-      
-      const parsed = JSON.parse(saved);
-      return parsed.map((p: any) => ({
-        ...p,
-        createdAt: new Date(p.createdAt),
-        updatedAt: new Date(p.updatedAt),
-        tasks: (p.tasks || []).map((t: any) => ({
-          ...t,
-          completedAt: t.completedAt ? new Date(t.completedAt) : undefined
-        })),
-        comments: (p.comments || []).map((c: any) => ({
-          ...c,
-          timestamp: new Date(c.timestamp)
-        }))
-      }));
+      return parseDates(JSON.parse(saved));
     } catch (e) {
+      console.error("Erro ao ler projetos:", e);
       return INITIAL_PROJECTS;
     }
   },
@@ -103,10 +136,23 @@ export const db = {
   async saveProject(project: Project): Promise<Project> {
     const projects = await this.getProjects();
     const index = projects.findIndex(p => p.id === project.id);
-    let updatedProjects = index >= 0 ? [...projects] : [project, ...projects];
-    if (index >= 0) updatedProjects[index] = project;
+    
+    // Garantir que estamos salvando objetos limpos e com datas tratadas internamente pelo stringify
+    const projectToSave = {
+      ...project,
+      updatedAt: new Date()
+    };
+
+    let updatedProjects;
+    if (index >= 0) {
+      updatedProjects = [...projects];
+      updatedProjects[index] = projectToSave;
+    } else {
+      updatedProjects = [projectToSave, ...projects];
+    }
+    
     localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(updatedProjects));
-    return project;
+    return projectToSave;
   },
 
   // --- BACKUP ---
@@ -114,13 +160,15 @@ export const db = {
     const data = {
       users: await this.getUsers(),
       projects: await this.getProjects(),
-      exportedAt: new Date().toISOString()
+      agenda: await this.getAgenda(),
+      exportedAt: new Date().toISOString(),
+      source: "STMI Projetos v3"
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Backup_BD_Projetos_${new Date().getTime()}.json`;
+    a.download = `STMI_BKP_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
   },
@@ -130,9 +178,11 @@ export const db = {
       const parsed = JSON.parse(jsonData);
       if (parsed.users) localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(parsed.users));
       if (parsed.projects) localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(parsed.projects));
+      if (parsed.agenda) localStorage.setItem(STORAGE_KEYS.AGENDA, JSON.stringify(parsed.agenda));
+      alert("Dados importados com sucesso! O sistema será reiniciado.");
       window.location.reload();
     } catch (e) {
-      alert("Arquivo de backup inválido.");
+      alert("Erro ao importar: Arquivo de backup corrompido ou inválido.");
     }
   }
 };
