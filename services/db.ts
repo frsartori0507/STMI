@@ -1,182 +1,176 @@
 
-import { Project, User, AgendaItem, ProjectStatus, TaskStage } from '../types';
-import { INITIAL_USERS } from './initialData';
-
-const STORAGE_KEYS = {
-  PROJECTS: 'stmi_v5_projects',
-  USERS: 'stmi_v5_users',
-  SESSION: 'stmi_v5_session',
-  AGENDA: 'stmi_v5_agenda',
-  LAST_SYNC: 'stmi_v5_last_sync'
-};
-
-const NETWORK_PATH = "\\\\10.9.0.211\\unidade tecnica\\Sistema\\web\\banco";
-
-// Handle para a pasta de rede (armazenado em memória durante a sessão)
-let networkDirectoryHandle: FileSystemDirectoryHandle | null = null;
-
-const hydrate = (data: any): any => {
-  if (data === null || data === undefined) return data;
-  if (typeof data === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(data)) return new Date(data);
-  if (Array.isArray(data)) return data.map(hydrate);
-  if (typeof data === 'object') {
-    const obj: any = {};
-    for (const key in data) obj[key] = hydrate(data[key]);
-    return obj;
-  }
-  return data;
-};
+import { supabase } from './supabase';
+import { Project, User, Comment, Task, ProjectStatus } from '../types';
 
 export const db = {
-  getNetworkPath() { return NETWORK_PATH; },
-  
-  isNetworkAuthorized() { return !!networkDirectoryHandle; },
-
-  async authorizeNetwork(): Promise<boolean> {
-    try {
-      // Abre o seletor de pastas nativo do Windows/Navegador
-      networkDirectoryHandle = await (window as any).showDirectoryPicker({
-        mode: 'readwrite'
-      });
-      return true;
-    } catch (err) {
-      console.error("Usuário cancelou ou erro ao acessar diretório:", err);
-      return false;
-    }
-  },
-
   async getUsers(): Promise<User[]> {
-    const raw = localStorage.getItem(STORAGE_KEYS.USERS);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
-      return INITIAL_USERS;
+    try {
+      const { data, error } = await supabase.from('profiles').select('*').order('name');
+      if (error) throw error;
+      return data.map(u => ({
+        id: u.id,
+        name: u.name,
+        avatar: u.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}`,
+        role: u.role,
+        username: u.username,
+        password: u.password,
+        status: u.status as any,
+        isAdmin: u.is_admin
+      }));
+    } catch (e) {
+      console.error("Erro ao buscar usuários:", e);
+      return [];
     }
-    return hydrate(JSON.parse(raw));
   },
 
   async getProjects(): Promise<Project[]> {
-    const raw = localStorage.getItem(STORAGE_KEYS.PROJECTS);
-    return raw ? hydrate(JSON.parse(raw)) : [];
-  },
-
-  async saveProject(project: Project) {
-    const projects = await this.getProjects();
-    const toSave = { ...project, updatedAt: new Date() };
-    const updated = projects.some(p => p.id === project.id) 
-      ? projects.map(p => p.id === project.id ? toSave : p) 
-      : [toSave, ...projects];
-    
-    localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(updated));
-    return toSave;
-  },
-
-  async saveUser(user: User) {
-    const users = await this.getUsers();
-    const updated = users.some(u => u.id === user.id) ? users.map(u => u.id === user.id ? user : u) : [...users, user];
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updated));
-  },
-
-  async generateSQLScript() {
-    const projects = await this.getProjects();
-    const users = await this.getUsers();
-    
-    let sql = `-- STMI SYNC SCRIPT\n-- DESTINO: ${NETWORK_PATH}\n-- DATA: ${new Date().toLocaleString()}\n\n`;
-    sql += `SET XACT_ABORT ON;\nBEGIN TRANSACTION;\n\n`;
-
-    users.forEach((u: any) => {
-      const escapedName = u.name.replace(/'/g, "''");
-      sql += `IF NOT EXISTS (SELECT 1 FROM STMI_Usuarios WHERE ID = '${u.id}')\n`;
-      sql += `  INSERT INTO STMI_Usuarios (ID, Nome, Cargo, Login, Status) VALUES ('${u.id}', '${escapedName}', '${u.role}', '${u.username}', '${u.status}');\n`;
-      sql += `ELSE\n`;
-      sql += `  UPDATE STMI_Usuarios SET Nome='${escapedName}', Cargo='${u.role}', Status='${u.status}' WHERE ID='${u.id}';\n`;
-    });
-
-    projects.forEach((p: any) => {
-      const escapedTitle = p.title.replace(/'/g, "''");
-      const escapedDesc = (p.description || '').replace(/'/g, "''");
-      const escapedAddr = (p.address || '').replace(/'/g, "''");
-      const escapedBairro = (p.neighborhood || '').replace(/'/g, "''");
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select(`
+          *,
+          tasks (*),
+          comments (*)
+        `)
+        .order('updated_at', { ascending: false });
       
-      sql += `IF NOT EXISTS (SELECT 1 FROM STMI_Projetos WHERE ID = '${p.id}')\n`;
-      sql += `  INSERT INTO STMI_Projetos (ID, Titulo, Descricao, Status, Endereco, Bairro, ResponsavelID, CriadoEm) \n`;
-      sql += `  VALUES ('${p.id}', '${escapedTitle}', '${escapedDesc}', '${p.status}', '${escapedAddr}', '${escapedBairro}', '${p.responsibleId}', '${p.createdAt}');\n`;
-      sql += `ELSE\n`;
-      sql += `  UPDATE STMI_Projetos SET Titulo='${escapedTitle}', Descricao='${escapedDesc}', Status='${p.status}', Endereco='${escapedAddr}', Bairro='${escapedBairro}' WHERE ID='${p.id}';\n`;
-
-      sql += `  DELETE FROM STMI_Tarefas WHERE ProjetoID = '${p.id}';\n`;
-      p.tasks?.forEach((t: any) => {
-        const escapedTaskTitle = t.title.replace(/'/g, "''");
-        sql += `  INSERT INTO STMI_Tarefas (ID, ProjetoID, Titulo, Etapa, Concluida) VALUES ('${t.id}', '${p.id}', '${escapedTaskTitle}', '${t.stage}', ${t.completed ? 1 : 0});\n`;
-      });
-
-      sql += `  DELETE FROM STMI_Comentarios WHERE ProjetoID = '${p.id}';\n`;
-      p.comments?.forEach((c: any) => {
-        const escapedComm = c.content.replace(/'/g, "''");
-        sql += `  INSERT INTO STMI_Comentarios (ID, ProjetoID, AutorID, Conteudo, DataHora) VALUES ('${c.id}', '${p.id}', '${c.authorId}', '${escapedComm}', '${c.timestamp}');\n`;
-      });
-    });
-
-    sql += `\nCOMMIT;\nPRINT 'Sincronização concluída com sucesso!';`;
-
-    // LÓGICA DE GRAVAÇÃO
-    if (networkDirectoryHandle) {
-      try {
-        const fileHandle = await networkDirectoryHandle.getFileHandle('STMI_SYNC_PRODUCAO.sql', { create: true });
-        const writable = await fileHandle.createWritable();
-        await writable.write(sql);
-        await writable.close();
-        console.log("Arquivo gravado diretamente na rede com sucesso.");
-      } catch (err) {
-        console.error("Erro ao gravar direto, recorrendo ao download:", err);
-        this.fallbackDownload(sql);
-      }
-    } else {
-      this.fallbackDownload(sql);
+      if (error) throw error;
+      if (!data) return [];
+      
+      return data.map(p => ({
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        responsibleId: p.responsible_id,
+        assignedUserIds: p.assigned_user_ids || [],
+        status: p.status as ProjectStatus,
+        address: p.address,
+        neighborhood: p.neighborhood,
+        createdAt: new Date(p.created_at),
+        updatedAt: new Date(p.updated_at),
+        tasks: (p.tasks || []).map((t: any) => ({
+          id: t.id,
+          title: t.title,
+          completed: t.completed,
+          stage: t.stage,
+          responsibleId: t.responsible_id,
+          completedAt: t.completed_at ? new Date(t.completed_at) : undefined
+        })),
+        comments: (p.comments || []).map((c: any) => ({
+          id: c.id,
+          projectId: c.project_id,
+          authorId: c.author_id,
+          authorName: c.author_name,
+          content: c.content,
+          timestamp: new Date(c.created_at)
+        })).sort((a: any, b: any) => a.timestamp.getTime() - b.timestamp.getTime())
+      }));
+    } catch (e) {
+      console.error("Erro ao buscar projetos:", e);
+      return [];
     }
-
-    localStorage.setItem(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
   },
 
-  fallbackDownload(content: string) {
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `STMI_SYNC_PRODUCAO.sql`;
-    a.click();
-    URL.revokeObjectURL(url);
+  async saveProject(project: Partial<Project>) {
+    try {
+      const projectData = {
+        title: project.title,
+        description: project.description,
+        responsible_id: project.responsibleId,
+        assigned_user_ids: project.assignedUserIds,
+        status: project.status,
+        address: project.address,
+        neighborhood: project.neighborhood,
+        updated_at: new Date()
+      };
+
+      let projectId = project.id;
+
+      if (projectId && projectId.length > 20) { // Verifica se é um UUID válido
+        const { error } = await supabase.from('projects').update(projectData).eq('id', projectId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase.from('projects').insert(projectData).select().single();
+        if (error) throw error;
+        projectId = data.id;
+      }
+
+      if (project.tasks && project.tasks.length > 0) {
+        const tasksData = project.tasks.map(t => ({
+          // Se o ID não for um UUID válido do banco, deixa o banco gerar um novo
+          id: (t.id && t.id.length > 20) ? t.id : undefined,
+          project_id: projectId,
+          title: t.title,
+          completed: t.completed,
+          stage: t.stage,
+          responsible_id: t.responsibleId,
+          completed_at: t.completedAt
+        }));
+        const { error: taskError } = await supabase.from('tasks').upsert(tasksData);
+        if (taskError) throw taskError;
+      }
+
+      return projectId;
+    } catch (e) {
+      console.error("Erro ao salvar projeto:", e);
+      throw e;
+    }
   },
 
-  getLastSync(): string {
-    return localStorage.getItem(STORAGE_KEYS.LAST_SYNC) || 'Nunca';
-  },
-
-  async getSession(): Promise<User | null> {
-    const raw = localStorage.getItem(STORAGE_KEYS.SESSION);
-    if (!raw) return null;
-    const { user, expires } = JSON.parse(raw);
-    return Date.now() > expires ? null : hydrate(user);
+  async addComment(comment: Partial<Comment>) {
+    const { error } = await supabase.from('comments').insert({
+      project_id: comment.projectId,
+      author_id: comment.authorId,
+      author_name: comment.authorName,
+      content: comment.content
+    });
+    if (error) throw error;
   },
 
   async setSession(user: User, remember: boolean) {
-    const expires = Date.now() + (remember ? 30 : 1) * 24 * 60 * 60 * 1000;
-    localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify({ user, expires }));
+    const storage = remember ? localStorage : sessionStorage;
+    storage.setItem('stmi_user_id', user.id);
   },
 
-  async clearSession() { localStorage.removeItem(STORAGE_KEYS.SESSION); },
+  async getSession(): Promise<User | null> {
+    const userId = localStorage.getItem('stmi_user_id') || sessionStorage.getItem('stmi_user_id');
+    if (!userId) return null;
 
-  async getAgenda(): Promise<AgendaItem[]> {
-    const raw = localStorage.getItem(STORAGE_KEYS.AGENDA);
-    return raw ? hydrate(JSON.parse(raw)) : [];
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+      
+      if (error || !profile) return null;
+
+      return {
+        id: profile.id,
+        name: profile.name,
+        avatar: profile.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.username}`,
+        role: profile.role,
+        username: profile.username,
+        password: profile.password,
+        status: profile.status as any,
+        isAdmin: profile.is_admin
+      };
+    } catch (e) {
+      return null;
+    }
   },
 
-  async saveAgendaItem(item: AgendaItem) {
-    const agenda = await this.getAgenda();
-    localStorage.setItem(STORAGE_KEYS.AGENDA, JSON.stringify([...agenda.filter(i => i.id !== item.id), item]));
+  async clearSession() {
+    localStorage.removeItem('stmi_user_id');
+    sessionStorage.removeItem('stmi_user_id');
   },
 
-  async deleteAgendaItem(id: string) {
-    const agenda = await this.getAgenda();
-    localStorage.setItem(STORAGE_KEYS.AGENDA, JSON.stringify(agenda.filter(i => i.id !== id)));
+  subscribeToProject(projectId: string, callback: () => void) {
+    return supabase
+      .channel(`project:${projectId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: `project_id=eq.${projectId}` }, callback)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${projectId}` }, callback)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects', filter: `id=eq.${projectId}` }, callback)
+      .subscribe();
   }
 };

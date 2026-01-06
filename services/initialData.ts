@@ -4,54 +4,53 @@ import { User, Project, ProjectStatus, TaskStage } from '../types';
 export const INITIAL_USERS: User[] = [
   {
     id: 'admin',
-    name: 'Administrador STMI',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
-    role: 'Administrador do Sistema',
+    name: 'Eng. Roberto Almeida',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin&backgroundColor=b6e3f4',
+    role: 'Coordenador Geral de Infra',
     username: 'admin',
     password: '123',
     status: 'ATIVO',
     isAdmin: true
+  },
+  {
+    id: 'user1',
+    name: 'Dra. Mariana Souza',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=mariana&backgroundColor=ffdfbf',
+    role: 'Técnica de Planejamento',
+    username: 'mariana',
+    password: '123',
+    status: 'ATIVO'
   }
 ];
 
 export const INITIAL_PROJECTS: Project[] = [
   {
-    id: 'welcome-project',
-    title: 'Projeto de Boas-Vindas STMI',
-    description: 'Este é um projeto de demonstração para ilustrar o funcionamento das etapas ponderadas e do chat da equipe.',
+    id: 'p1',
+    title: 'Recuperação Viária Setor Norte',
+    description: 'Projeto de recapeamento e sinalização horizontal do Setor Norte da cidade, focando em durabilidade e acessibilidade.',
     responsibleId: 'admin',
-    assignedUserIds: ['admin'],
+    assignedUserIds: ['admin', 'user1'],
     status: ProjectStatus.IN_PROGRESS,
     tasks: [
       {
         id: 't1',
-        title: 'Explorar a nova interface de etapas',
+        title: 'Topografia do Trecho A',
         completed: true,
         stage: TaskStage.SURVEY,
-        responsibleId: 'admin',
-        completedAt: new Date()
+        responsibleId: 'admin'
       },
       {
         id: 't2',
-        title: 'Testar o cálculo de 50% da etapa de Finalização',
+        title: 'Definição do Material Asfáltico',
         completed: false,
-        stage: TaskStage.FINALIZATION,
-        responsibleId: 'admin'
+        stage: TaskStage.PLANNING,
+        responsibleId: 'user1'
       }
     ],
-    comments: [
-      {
-        id: 'c1',
-        projectId: 'welcome-project',
-        authorId: 'admin',
-        authorName: 'Sistema',
-        content: 'Bem-vindo ao novo sistema de gestão de projetos STMI!',
-        timestamp: new Date()
-      }
-    ],
+    comments: [],
     createdAt: new Date(),
     updatedAt: new Date(),
-    address: 'Sede Administrativa',
-    neighborhood: 'Centro'
+    address: 'Av. das Indústrias',
+    neighborhood: 'Distrito Industrial'
   }
 ];

@@ -2,44 +2,38 @@
 ================================================================================
 RELATÓRIO DE CONFIGURAÇÃO - AMBIENTE DE REDE STMI
 ================================================================================
-LOCAL DO BANCO: \\10.9.0.211\unidade tecnica\Sistema\web\banco
-MÉTODO: SQL Server Production Sync (Idempotente)
+LOCAL DO BANCO MDB: \\10.9.0.211\unidade tecnica\Sistema\web\banco\bd_stmi.MDB
+ESTRATÉGIA: Sincronização via Tabelas Vinculadas (MDB Linked Tables)
 ================================================================================
 
-PASSO 1: SCRIPT DE AUTOMAÇÃO (OPCIONAL)
----------------------------------------
-Crie um arquivo chamado "Sync_Banco.bat" na sua área de trabalho e cole o 
-seguinte código para mover o arquivo baixado automaticamente:
+PRIMEIROS PASSOS PARA TI / UNIDADE TÉCNICA:
+1. Certifique-se de que o banco "bd_stmi.MDB" tem permissão de escrita para a equipe.
+2. No App, a seção "Integração MDB" agora aponta diretamente para este local.
 
-@echo off
-set "origem=%USERPROFILE%\Downloads\STMI_SYNC_PRODUCAO.sql"
-set "destino=\\10.9.0.211\unidade tecnica\Sistema\web\banco\Sync_Atual.sql"
+COMO SINCRONIZAR OS DADOS DO APP COM O ACCESS:
 
-if exist "%origem%" (
-    move /y "%origem%" "%destino%"
-    echo [OK] Script movido para o servidor de rede!
-) else (
-    echo [ERRO] Script nao encontrado na pasta Downloads.
-)
-pause
+MÉTODO A: TABELAS VINCULADAS (RECOMENDADO)
+------------------------------------------
+1. No App STMI, clique em "Exportar CSV para Access".
+2. Salve o arquivo "DADOS_PARA_ACCESS.csv" na mesma pasta do seu .MDB.
+3. No Microsoft Access, vá em: Dados Externos > Novo Banco de Dados > Do Arquivo > Texto.
+4. Selecione "Vincular à origem de dados criando uma tabela vinculada".
+5. Selecione o CSV exportado.
+6. Pronto! Agora, toda vez que você exportar o CSV do App e sobrescrever o antigo,
+   o Access atualizará as consultas e relatórios automaticamente.
 
-PASSO 2: EXECUÇÃO NO SERVIDOR
------------------------------
-O arquivo gerado pelo App ("STMI_SYNC_PRODUCAO.sql") contém uma proteção de 
-transação (BEGIN TRANSACTION / COMMIT). Se houver qualquer erro durante a 
-sincronização, o banco de dados da rede não será afetado (Rollback automático).
+MÉTODO B: EXECUÇÃO DE SCRIPT SQL
+--------------------------------
+1. Gere o arquivo .SQL no App.
+2. No Access, crie uma "Consulta em Modo SQL" (Query Design > SQL View).
+3. Cole o conteúdo do script e execute.
+   *Nota: O script gerado usa o dialeto ANSI compatível com macros do Access.*
 
-LOGICA DE UPSERT:
-- Se o Projeto/Usuário NÃO existe no banco da rede: O script CRIA.
-- Se o Projeto/Usuário JÁ existe: O script ATUALIZA os campos alterados.
-- IDs de Projetos são preservados para garantir que links externos não quebrem.
+VANTAGENS DESTA IMPLEMENTAÇÃO:
+- Não requer instalação de drivers ODBC complexos no navegador.
+- Funciona 100% offline se a rede cair (os dados ficam no cache do App).
+- Integridade total com o caminho \\10.9.0.211 fornecido.
 
-PASSO 3: SEGURANÇA DE REDE
---------------------------
-Certifique-se de que o usuário logado na máquina tem permissão de "Escrita" e 
-"Modificação" na pasta: \\10.9.0.211\unidade tecnica\Sistema\web\banco.
-
-Se o banco for SQL Server Express, você pode configurar o "SQL Server Agent" 
-para ler e executar esse script SQL automaticamente toda vez que ele for 
-atualizado na pasta de rede.
+SUPORTE:
+unidade.tecnica@stmi.gov.br
 ================================================================================
