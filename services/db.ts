@@ -2,6 +2,11 @@
 import { supabase } from './supabase';
 import { Project, User, Comment, Task, ProjectStatus } from '../types';
 
+const isValidUUID = (id: string) => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(id);
+};
+
 export const db = {
   async getUsers(): Promise<User[]> {
     try {
@@ -35,21 +40,15 @@ export const db = {
         is_admin: user.isAdmin
       };
 
-      if (user.id && user.id.length > 20) {
-        const { error } = await supabase
-          .from('profiles')
-          .update(userData)
-          .eq('id', user.id);
+      if (user.id && isValidUUID(user.id)) {
+        const { error } = await supabase.from('profiles').update(userData).eq('id', user.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from('profiles')
-          .insert(userData);
+        const { error } = await supabase.from('profiles').insert(userData);
         if (error) throw error;
       }
-    } catch (e) {
-      console.error("Erro ao salvar usuário:", e);
-      throw e;
+    } catch (e: any) {
+      throw new Error(e.message || "Erro ao salvar usuário");
     }
   },
 
@@ -57,11 +56,7 @@ export const db = {
     try {
       const { data, error } = await supabase
         .from('projects')
-        .select(`
-          *,
-          tasks (*),
-          comments (*)
-        `)
+        .select(`*, tasks (*), comments (*)`)
         .order('updated_at', { ascending: false });
       
       if (error) throw error;
@@ -96,15 +91,14 @@ export const db = {
           timestamp: new Date(c.created_at)
         })).sort((a: any, b: any) => a.timestamp.getTime() - b.timestamp.getTime())
       }));
-    } catch (e) {
-      console.error("Erro ao buscar projetos:", e);
+    } catch (e: any) {
       return [];
     }
   },
 
   async saveProject(project: Partial<Project>) {
     try {
-      const projectData = {
+      const projectData: any = {
         title: project.title,
         description: project.description,
         responsible_id: project.responsibleId,
@@ -117,7 +111,7 @@ export const db = {
 
       let projectId = project.id;
 
-      if (projectId && projectId.length > 20) {
+      if (projectId && isValidUUID(projectId)) {
         const { error } = await supabase.from('projects').update(projectData).eq('id', projectId);
         if (error) throw error;
       } else {
@@ -126,34 +120,39 @@ export const db = {
         projectId = data.id;
       }
 
-      if (projectId) {
-        const { error: deleteError } = await supabase
-          .from('tasks')
-          .delete()
-          .eq('project_id', projectId);
-        
-        if (deleteError) throw deleteError;
+      if (projectId && project.tasks) {
+        // Remove tarefas antigas para garantir integridade total da edição
+        await supabase.from('tasks').delete().eq('project_id', projectId);
 
-        if (project.tasks && project.tasks.length > 0) {
-          const tasksData = project.tasks.map(t => ({
+        if (project.tasks.length > 0) {
+          const tasksToInsert = project.tasks.map(t => ({
             project_id: projectId,
             title: t.title,
             completed: t.completed || false,
             stage: t.stage,
-            responsible_id: t.responsibleId,
+            responsible_id: isValidUUID(t.responsibleId) ? t.responsibleId : project.responsibleId,
             observations: t.observations || '',
             completed_at: t.completedAt
           }));
           
-          const { error: taskError } = await supabase.from('tasks').insert(tasksData);
+          const { error: taskError } = await supabase.from('tasks').insert(tasksToInsert);
           if (taskError) throw taskError;
         }
       }
 
       return projectId;
-    } catch (e) {
-      console.error("Erro ao salvar projeto:", e);
-      throw e;
+    } catch (e: any) {
+      throw new Error(e.message || "Falha na conexão com o banco de dados STMI.");
+    }
+  },
+
+  async deleteProject(projectId: string) {
+    try {
+      if (!isValidUUID(projectId)) return;
+      const { error } = await supabase.from('projects').delete().eq('id', projectId);
+      if (error) throw error;
+    } catch (e: any) {
+      throw new Error(e.message || "Erro ao excluir projeto.");
     }
   },
 
@@ -174,17 +173,11 @@ export const db = {
 
   async getSession(): Promise<User | null> {
     const userId = localStorage.getItem('stmi_user_id') || sessionStorage.getItem('stmi_user_id');
-    if (!userId) return null;
+    if (!userId || !isValidUUID(userId)) return null;
 
     try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-      
+      const { data: profile, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
       if (error || !profile) return null;
-
       return {
         id: profile.id,
         name: profile.name,
@@ -206,6 +199,7 @@ export const db = {
   },
 
   subscribeToProject(projectId: string, callback: () => void) {
+    if (!isValidUUID(projectId)) return { unsubscribe: () => {} };
     return supabase
       .channel(`project:${projectId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: `project_id=eq.${projectId}` }, callback)
