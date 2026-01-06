@@ -49,7 +49,8 @@ export interface Task {
   title: string;
   completed: boolean;
   stage: TaskStage;
-  responsibleId: string; // Obrigatório para cada tarefa
+  responsibleId: string;
+  observations?: string; // Novo campo para notas do RI
   completedAt?: Date;
 }
 
@@ -57,7 +58,7 @@ export interface Project {
   id: string;
   title: string;
   description: string;
-  responsibleId: string; // Coordenador Geral
+  responsibleId: string;
   assignedUserIds: string[];
   status: ProjectStatus;
   tasks: Task[];

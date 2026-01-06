@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Project, User, ProjectStatus, AgendaItem } from './types';
+import { Project, User, ProjectStatus, AgendaItem, Task } from './types';
 import { STATUS_COLORS } from './constants';
 import ProjectCard from './components/ProjectCard';
 import ProjectModal from './components/ProjectModal';
@@ -108,6 +108,20 @@ const App: React.FC = () => {
       await loadData();
     } catch (err) {
       console.error("Erro ao alternar tarefa:", err);
+    }
+  };
+
+  const handleTaskObservation = async (taskId: string, obs: string) => {
+    if (!selectedProject) return;
+    const updatedTasks = selectedProject.tasks.map(t => 
+      t.id === taskId ? { ...t, observations: obs } : t
+    );
+    try {
+      // Usamos um debounce manual ou salvamos direto aqui para simplicidade técnica inicial
+      await db.saveProject({ ...selectedProject, tasks: updatedTasks });
+      // Não damos loadData aqui para não perder o foco do input durante a digitação
+    } catch (err) {
+      console.error("Erro ao salvar observação:", err);
     }
   };
 
@@ -274,25 +288,39 @@ const App: React.FC = () => {
                       Checklist e Responsáveis (RI)
                     </h4>
                     
-                    <div className="grid gap-3">
+                    <div className="grid gap-4">
                       {(selectedProject.tasks || []).length > 0 ? (selectedProject.tasks || []).map(task => {
                         const ri = users.find(u => u.id === task.responsibleId);
                         return (
-                          <div key={task.id} className="group flex items-center gap-5 p-5 bg-white rounded-3xl border border-slate-200 hover:border-blue-300 hover:shadow-lg hover:shadow-blue-50 transition-all">
-                            <input 
-                              type="checkbox" 
-                              checked={task.completed} 
-                              onChange={() => handleTaskToggle(task.id)}
-                              className="w-6 h-6 rounded-lg border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                            />
-                            <div className="flex-1">
-                              <p className={`text-sm font-bold ${task.completed ? 'line-through text-slate-400' : 'text-slate-800'}`}>{task.title}</p>
-                              <div className="flex items-center gap-2 mt-1.5">
-                                 <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
-                                 <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest">Responsável (RI): <span className="text-blue-600">{ri?.name || 'Coordenação'}</span></p>
+                          <div key={task.id} className="group flex flex-col gap-3 p-5 bg-white rounded-3xl border border-slate-200 hover:border-blue-300 hover:shadow-lg hover:shadow-blue-50 transition-all">
+                            <div className="flex items-center gap-5">
+                              <input 
+                                type="checkbox" 
+                                checked={task.completed} 
+                                onChange={() => handleTaskToggle(task.id)}
+                                className="w-6 h-6 rounded-lg border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-sm font-bold truncate ${task.completed ? 'line-through text-slate-400' : 'text-slate-800'}`}>{task.title}</p>
+                                <div className="flex items-center gap-2 mt-1.5">
+                                   <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                                   <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest">Responsável (RI): <span className="text-blue-600">{ri?.name || 'Coordenação'}</span></p>
+                                </div>
                               </div>
+                              <span className="text-[9px] font-black text-slate-300 bg-slate-50 px-3 py-1.5 rounded-xl uppercase tracking-widest">{task.stage}</span>
                             </div>
-                            <span className="text-[9px] font-black text-slate-300 bg-slate-50 px-3 py-1.5 rounded-xl uppercase tracking-widest">{task.stage}</span>
+                            
+                            {/* CAMPO DE OBSERVAÇÕES DO RI */}
+                            <div className="ml-11 flex items-start gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100 group-hover:border-blue-100 transition-all">
+                              <svg className="w-3.5 h-3.5 text-slate-300 mt-1 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="3" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                              <textarea 
+                                placeholder="Notas técnicas ou observações de campo..."
+                                defaultValue={task.observations || ''}
+                                onBlur={(e) => handleTaskObservation(task.id, e.target.value)}
+                                className="w-full bg-transparent border-none outline-none text-[11px] font-medium text-slate-500 placeholder:text-slate-300 resize-none leading-normal min-h-[20px]"
+                                rows={1}
+                              />
+                            </div>
                           </div>
                         );
                       }) : (

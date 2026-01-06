@@ -22,6 +22,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, av
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskStage, setNewTaskStage] = useState<TaskStage>(TaskStage.SURVEY);
   const [newTaskResponsibleId, setNewTaskResponsibleId] = useState('');
+  const [newTaskObs, setNewTaskObs] = useState('');
 
   useEffect(() => {
     const firstUserId = availableUsers[0]?.id || '';
@@ -51,7 +52,6 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, av
   const addTask = () => {
     if (!newTaskTitle.trim()) return;
     
-    // Fallback para o primeiro usuário se o responsável não estiver selecionado
     const respId = newTaskResponsibleId || availableUsers[0]?.id;
     if (!respId) return;
 
@@ -60,10 +60,12 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, av
       title: newTaskTitle,
       completed: false,
       stage: newTaskStage,
-      responsibleId: respId
+      responsibleId: respId,
+      observations: newTaskObs
     };
     setTasks([...tasks, task]);
     setNewTaskTitle('');
+    setNewTaskObs('');
   };
 
   const removeTask = (id: string) => {
@@ -160,12 +162,18 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, av
                 <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Cronograma de Tarefas (Proporcional)</h3>
               </div>
               
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/50 mb-10 space-y-5">
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/50 mb-10 space-y-4">
                  <input 
                     value={newTaskTitle} 
                     onChange={(e) => setNewTaskTitle(e.target.value)} 
                     placeholder="O que precisa ser feito?" 
                     className="w-full px-6 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none focus:bg-white focus:border-blue-500 transition-all" 
+                 />
+                 <input 
+                    value={newTaskObs} 
+                    onChange={(e) => setNewTaskObs(e.target.value)} 
+                    placeholder="Nota inicial ou observação (opcional)" 
+                    className="w-full px-6 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-[10px] font-medium outline-none" 
                  />
                  <div className="grid grid-cols-2 gap-3">
                     <select value={newTaskStage} onChange={(e) => setNewTaskStage(e.target.value as TaskStage)} className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-[10px] font-black uppercase outline-none">
@@ -193,17 +201,24 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, av
                              {stageTasks.map(t => {
                                 const resp = availableUsers.find(u => u.id === t.responsibleId);
                                 return (
-                                  <div key={t.id} className="group flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl hover:border-blue-200 transition-all shadow-sm">
-                                     <div className="flex items-center gap-4">
-                                       <img src={resp?.avatar} className="w-8 h-8 rounded-lg" />
-                                       <div className="flex flex-col">
-                                          <span className="text-xs font-bold text-slate-800">{t.title}</span>
-                                          <span className="text-[9px] text-blue-500 font-black uppercase tracking-widest">{resp?.name}</span>
+                                  <div key={t.id} className="group flex flex-col p-4 bg-white border border-slate-100 rounded-2xl hover:border-blue-200 transition-all shadow-sm">
+                                     <div className="flex items-center justify-between">
+                                       <div className="flex items-center gap-4">
+                                         <img src={resp?.avatar} className="w-8 h-8 rounded-lg" />
+                                         <div className="flex flex-col">
+                                            <span className="text-xs font-bold text-slate-800">{t.title}</span>
+                                            <span className="text-[9px] text-blue-500 font-black uppercase tracking-widest">{resp?.name}</span>
+                                         </div>
                                        </div>
+                                       <button type="button" onClick={() => removeTask(t.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>
+                                       </button>
                                      </div>
-                                     <button type="button" onClick={() => removeTask(t.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>
-                                     </button>
+                                     {t.observations && (
+                                       <div className="mt-2 ml-12 text-[9px] text-slate-400 bg-slate-50 p-2 rounded-lg italic">
+                                         {t.observations}
+                                       </div>
+                                     )}
                                   </div>
                                 );
                              })}

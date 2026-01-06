@@ -84,6 +84,7 @@ export const db = {
           completed: t.completed,
           stage: t.stage,
           responsibleId: t.responsible_id,
+          observations: t.observations || '',
           completedAt: t.completed_at ? new Date(t.completed_at) : undefined
         })),
         comments: (p.comments || []).map((c: any) => ({
@@ -125,10 +126,7 @@ export const db = {
         projectId = data.id;
       }
 
-      // Sincronização de Tarefas: Deletamos as existentes e inserimos as novas da lista
-      // Isso garante que remoções no modal também sejam persistidas no banco
       if (projectId) {
-        // Remove tarefas antigas para este projeto
         const { error: deleteError } = await supabase
           .from('tasks')
           .delete()
@@ -136,7 +134,6 @@ export const db = {
         
         if (deleteError) throw deleteError;
 
-        // Se houver tarefas, insere-as novamente
         if (project.tasks && project.tasks.length > 0) {
           const tasksData = project.tasks.map(t => ({
             project_id: projectId,
@@ -144,6 +141,7 @@ export const db = {
             completed: t.completed || false,
             stage: t.stage,
             responsible_id: t.responsibleId,
+            observations: t.observations || '',
             completed_at: t.completedAt
           }));
           
