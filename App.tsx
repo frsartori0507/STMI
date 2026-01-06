@@ -28,12 +28,22 @@ const App: React.FC = () => {
   const [chatMsg, setChatMsg] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const selectedProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
+  const selectedProject = useMemo(() => {
+    if (!selectedProjectId) return undefined;
+    return projects.find(p => p.id === selectedProjectId);
+  }, [projects, selectedProjectId]);
 
   const loadData = async () => {
-    const [u, p] = await Promise.all([db.getUsers(), db.getProjects()]);
-    setUsers(u);
-    setProjects(p);
+    try {
+      const [u, p]: [User[], Project[]] = await Promise.all([
+        db.getUsers(), 
+        db.getProjects()
+      ]);
+      setUsers(u);
+      setProjects(p);
+    } catch (err) {
+      console.error("Erro ao carregar dados:", err);
+    }
   };
 
   useEffect(() => {
@@ -50,7 +60,11 @@ const App: React.FC = () => {
     if (selectedProjectId) {
       const sub = db.subscribeToProject(selectedProjectId, loadData);
       scrollToBottom();
-      return () => { sub.unsubscribe(); };
+      return () => { 
+        if (sub && typeof sub.unsubscribe === 'function') {
+          sub.unsubscribe(); 
+        }
+      };
     }
   }, [selectedProjectId]);
 
@@ -89,8 +103,12 @@ const App: React.FC = () => {
     const updatedTasks = selectedProject.tasks.map(t => 
       t.id === taskId ? { ...t, completed: !t.completed, completedAt: !t.completed ? new Date() : undefined } : t
     );
-    await db.saveProject({ ...selectedProject, tasks: updatedTasks });
-    await loadData();
+    try {
+      await db.saveProject({ ...selectedProject, tasks: updatedTasks });
+      await loadData();
+    } catch (err) {
+      console.error("Erro ao alternar tarefa:", err);
+    }
   };
 
   const handleSaveUser = async (userData: User) => {
@@ -101,6 +119,20 @@ const App: React.FC = () => {
       setEditingUser(null);
     } catch (e) {
       alert("Erro ao salvar membro. Verifique se o nome de usuário já existe.");
+    }
+  };
+
+  const handleSaveProject = async (data: Partial<Project>) => {
+    try {
+      const id = await db.saveProject(data);
+      await loadData();
+      if (id && !selectedProjectId) {
+        setSelectedProjectId(id);
+      }
+      setModalProject(false);
+    } catch (err) {
+      console.error("Erro ao salvar projeto:", err);
+      alert("Falha ao salvar a obra. Verifique a conexão com o banco de dados.");
     }
   };
 
@@ -243,7 +275,7 @@ const App: React.FC = () => {
                     </h4>
                     
                     <div className="grid gap-3">
-                      {selectedProject.tasks.length > 0 ? selectedProject.tasks.map(task => {
+                      {(selectedProject.tasks || []).length > 0 ? (selectedProject.tasks || []).map(task => {
                         const ri = users.find(u => u.id === task.responsibleId);
                         return (
                           <div key={task.id} className="group flex items-center gap-5 p-5 bg-white rounded-3xl border border-slate-200 hover:border-blue-300 hover:shadow-lg hover:shadow-blue-50 transition-all">
@@ -276,10 +308,10 @@ const App: React.FC = () => {
               <div className="lg:col-span-4 flex flex-col bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden">
                 <div className="p-6 bg-[#0f172a] text-white flex items-center justify-between">
                   <h4 className="font-black text-[10px] uppercase tracking-[0.2em]">Canal RI / Mensagens</h4>
-                  <span className="text-[8px] font-black bg-slate-800 px-2 py-1 rounded-md">{selectedProject.comments.length} MSG</span>
+                  <span className="text-[8px] font-black bg-slate-800 px-2 py-1 rounded-md">{(selectedProject.comments || []).length} MSG</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50/30 custom-scrollbar">
-                  {selectedProject.comments.map((c, idx) => {
+                  {(selectedProject.comments || []).map((c, idx) => {
                     const isMe = c.authorId === currentUser.id;
                     return (
                       <div key={c.id || idx} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
@@ -364,7 +396,7 @@ const App: React.FC = () => {
       <ProjectModal 
         isOpen={modalProject} 
         onClose={() => setModalProject(false)} 
-        onSave={async (data) => { await db.saveProject(data); await loadData(); }} 
+        onSave={handleSaveProject} 
         availableUsers={users} 
         editProject={selectedProject}
       />
