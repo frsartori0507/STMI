@@ -33,6 +33,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, av
       setNeighborhood(editProject.neighborhood || '');
       setTasks(editProject.tasks || []);
       setStatus(editProject.status);
+      setNewTaskResponsibleId(firstUserId);
     } else {
       setTitle('');
       setDescription('');
@@ -48,13 +49,18 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, av
   if (!isOpen) return null;
 
   const addTask = () => {
-    if (!newTaskTitle.trim() || !newTaskResponsibleId) return;
+    if (!newTaskTitle.trim()) return;
+    
+    // Fallback para o primeiro usuário se o responsável não estiver selecionado
+    const respId = newTaskResponsibleId || availableUsers[0]?.id;
+    if (!respId) return;
+
     const task: Task = {
       id: Math.random().toString(36).substr(2,9),
       title: newTaskTitle,
       completed: false,
       stage: newTaskStage,
-      responsibleId: newTaskResponsibleId
+      responsibleId: respId
     };
     setTasks([...tasks, task]);
     setNewTaskTitle('');
@@ -106,7 +112,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, av
                 
                 <div className="space-y-5">
                    <div>
-                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest ml-1">Nome da Obra / Projeto</label>
+                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest ml-1">Nome da Obra / Projetos</label>
                      <input required value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:bg-white focus:border-blue-500 outline-none transition-all shadow-sm" placeholder="Ex: Revitalização do Centro Comercial" />
                    </div>
                    <div>
@@ -119,7 +125,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, av
                         <input value={address} onChange={(e) => setAddress(e.target.value)} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold" />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest ml-1">Bairro Técnica</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest ml-1">Bairro</label>
                         <input value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold" />
                       </div>
                    </div>
@@ -170,7 +176,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, av
                     </select>
                  </div>
                  <button type="button" onClick={addTask} className="w-full py-4 bg-blue-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] hover:bg-blue-700 transition-all shadow-xl shadow-blue-50">
-                    Vincular Atividade à Obra
+                    VINCULAR ATIVIDADE À OBRA
                  </button>
               </div>
 
@@ -214,7 +220,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, av
         <footer className="px-10 py-8 border-t border-slate-100 bg-white flex justify-end gap-4 shadow-[0_-10px_40px_rgba(0,0,0,0.02)]">
           <button type="button" onClick={onClose} className="px-8 py-4 text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 rounded-2xl transition-all">Cancelar</button>
           <button form="projectForm" type="submit" className="px-12 py-4 bg-blue-600 text-white font-black uppercase text-[11px] tracking-[0.2em] rounded-2xl shadow-2xl shadow-blue-100 hover:scale-[1.02] active:scale-95 transition-all">
-            Salvar e Publicar Obra
+            SALVAR E PUBLICAR OBRA
           </button>
         </footer>
       </div>

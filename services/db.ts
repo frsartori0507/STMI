@@ -23,6 +23,36 @@ export const db = {
     }
   },
 
+  async saveUser(user: Partial<User>) {
+    try {
+      const userData = {
+        name: user.name,
+        username: user.username,
+        password: user.password,
+        role: user.role,
+        avatar: user.avatar,
+        status: user.status,
+        is_admin: user.isAdmin
+      };
+
+      if (user.id && user.id.length > 20) {
+        const { error } = await supabase
+          .from('profiles')
+          .update(userData)
+          .eq('id', user.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('profiles')
+          .insert(userData);
+        if (error) throw error;
+      }
+    } catch (e) {
+      console.error("Erro ao salvar usuário:", e);
+      throw e;
+    }
+  },
+
   async getProjects(): Promise<Project[]> {
     try {
       const { data, error } = await supabase
@@ -86,7 +116,7 @@ export const db = {
 
       let projectId = project.id;
 
-      if (projectId && projectId.length > 20) { // Verifica se é um UUID válido
+      if (projectId && projectId.length > 20) {
         const { error } = await supabase.from('projects').update(projectData).eq('id', projectId);
         if (error) throw error;
       } else {
@@ -95,19 +125,31 @@ export const db = {
         projectId = data.id;
       }
 
-      if (project.tasks && project.tasks.length > 0) {
-        const tasksData = project.tasks.map(t => ({
-          // Se o ID não for um UUID válido do banco, deixa o banco gerar um novo
-          id: (t.id && t.id.length > 20) ? t.id : undefined,
-          project_id: projectId,
-          title: t.title,
-          completed: t.completed,
-          stage: t.stage,
-          responsible_id: t.responsibleId,
-          completed_at: t.completedAt
-        }));
-        const { error: taskError } = await supabase.from('tasks').upsert(tasksData);
-        if (taskError) throw taskError;
+      // Sincronização de Tarefas: Deletamos as existentes e inserimos as novas da lista
+      // Isso garante que remoções no modal também sejam persistidas no banco
+      if (projectId) {
+        // Remove tarefas antigas para este projeto
+        const { error: deleteError } = await supabase
+          .from('tasks')
+          .delete()
+          .eq('project_id', projectId);
+        
+        if (deleteError) throw deleteError;
+
+        // Se houver tarefas, insere-as novamente
+        if (project.tasks && project.tasks.length > 0) {
+          const tasksData = project.tasks.map(t => ({
+            project_id: projectId,
+            title: t.title,
+            completed: t.completed || false,
+            stage: t.stage,
+            responsible_id: t.responsibleId,
+            completed_at: t.completedAt
+          }));
+          
+          const { error: taskError } = await supabase.from('tasks').insert(tasksData);
+          if (taskError) throw taskError;
+        }
       }
 
       return projectId;
