@@ -1,4 +1,3 @@
-
 import { supabase } from './supabase';
 import { Project, User, Comment, Task, ProjectStatus } from '../types';
 
@@ -11,7 +10,7 @@ export const db = {
   async getUsers(): Promise<User[]> {
     try {
       const { data, error } = await supabase.from('profiles').select('*').order('name');
-      if (error) throw error;
+      if (error) throw new Error(error.message);
       return data.map(u => ({
         id: u.id,
         name: u.name,
@@ -22,7 +21,7 @@ export const db = {
         status: u.status as any,
         isAdmin: u.is_admin
       }));
-    } catch (e) {
+    } catch (e: any) {
       console.error("Erro ao buscar usuários:", e);
       return [];
     }
@@ -42,10 +41,10 @@ export const db = {
 
       if (user.id && isValidUUID(user.id)) {
         const { error } = await supabase.from('profiles').update(userData).eq('id', user.id);
-        if (error) throw error;
+        if (error) throw new Error(error.message);
       } else {
         const { error } = await supabase.from('profiles').insert(userData);
-        if (error) throw error;
+        if (error) throw new Error(error.message);
       }
     } catch (e: any) {
       throw new Error(e.message || "Erro ao salvar usuário");
@@ -59,7 +58,7 @@ export const db = {
         .select(`*, tasks (*), comments (*)`)
         .order('updated_at', { ascending: false });
       
-      if (error) throw error;
+      if (error) throw new Error(error.message);
       if (!data) return [];
       
       return data.map(p => ({
@@ -92,6 +91,7 @@ export const db = {
         })).sort((a: any, b: any) => a.timestamp.getTime() - b.timestamp.getTime())
       }));
     } catch (e: any) {
+      console.error("Erro ao buscar projetos:", e);
       return [];
     }
   },
@@ -102,7 +102,7 @@ export const db = {
         title: project.title,
         description: project.description,
         responsible_id: project.responsibleId,
-        assigned_user_ids: project.assignedUserIds,
+        assigned_user_ids: project.assignedUserIds || [],
         status: project.status,
         address: project.address,
         neighborhood: project.neighborhood,
@@ -112,37 +112,47 @@ export const db = {
       let projectId = project.id;
 
       if (projectId && isValidUUID(projectId)) {
-        const { error } = await supabase.from('projects').update(projectData).eq('id', projectId);
-        if (error) throw error;
+        const { error: projectError } = await supabase.from('projects').update(projectData).eq('id', projectId);
+        if (projectError) throw new Error(projectError.message);
       } else {
-        const { data, error } = await supabase.from('projects').insert(projectData).select().single();
-        if (error) throw error;
+        const { data, error: projectError } = await supabase.from('projects').insert(projectData).select().single();
+        if (projectError) throw new Error(projectError.message);
         projectId = data.id;
       }
 
       if (projectId && project.tasks) {
-        // Remove tarefas antigas para garantir integridade total da edição
-        await supabase.from('tasks').delete().eq('project_id', projectId);
+        // Remove tarefas antigas primeiro
+        const { error: delError } = await supabase.from('tasks').delete().eq('project_id', projectId);
+        if (delError) throw new Error(delError.message);
 
         if (project.tasks.length > 0) {
           const tasksToInsert = project.tasks.map(t => ({
             project_id: projectId,
             title: t.title,
-            completed: t.completed || false,
+            completed: !!t.completed,
             stage: t.stage,
             responsible_id: isValidUUID(t.responsibleId) ? t.responsibleId : project.responsibleId,
             observations: t.observations || '',
-            completed_at: t.completedAt
+            completed_at: t.completedAt || null
           }));
           
           const { error: taskError } = await supabase.from('tasks').insert(tasksToInsert);
-          if (taskError) throw taskError;
+          if (taskError) {
+             console.error("Erro técnico nas tarefas:", taskError);
+             const errorMsg = taskError.message || "Erro desconhecido nas tarefas";
+             if (errorMsg.includes("observations")) {
+               throw new Error("⚠️ Erro de Banco de Dados: A coluna 'observations' não existe. Por favor, execute no seu SQL Editor do Supabase: ALTER TABLE tasks ADD COLUMN observations text DEFAULT '';");
+             }
+             throw new Error(errorMsg);
+          }
         }
       }
 
       return projectId;
     } catch (e: any) {
-      throw new Error(e.message || "Falha na conexão com o banco de dados STMI.");
+      console.error("Database Save Error:", e);
+      // Garante que o que é lançado é sempre uma mensagem string e não o objeto de erro bruto
+      throw new Error(e.message || "Falha ao processar salvamento no banco de dados.");
     }
   },
 
@@ -150,20 +160,24 @@ export const db = {
     try {
       if (!isValidUUID(projectId)) return;
       const { error } = await supabase.from('projects').delete().eq('id', projectId);
-      if (error) throw error;
+      if (error) throw new Error(error.message);
     } catch (e: any) {
-      throw new Error(e.message || "Erro ao excluir projeto.");
+      throw new Error(e.message || "Erro ao excluir o projeto.");
     }
   },
 
   async addComment(comment: Partial<Comment>) {
-    const { error } = await supabase.from('comments').insert({
-      project_id: comment.projectId,
-      author_id: comment.authorId,
-      author_name: comment.authorName,
-      content: comment.content
-    });
-    if (error) throw error;
+    try {
+      const { error } = await supabase.from('comments').insert({
+        project_id: comment.projectId,
+        author_id: comment.authorId,
+        author_name: comment.authorName,
+        content: comment.content
+      });
+      if (error) throw new Error(error.message);
+    } catch (e: any) {
+      throw new Error(e.message || "Erro ao enviar comentário.");
+    }
   },
 
   async setSession(user: User, remember: boolean) {

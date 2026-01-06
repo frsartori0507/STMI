@@ -1,16 +1,16 @@
+-- ==========================================================
+-- 🚨 CORREÇÃO OBRIGATÓRIA (Execute agora no SQL Editor)
+-- ==========================================================
+-- Este comando resolve o erro "column 'observations' not found"
+
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS observations text DEFAULT '';
 
 -- ==========================================================
--- SCRIPT DE CONFIGURAÇÃO STMI - COPIE E COLE NO SQL EDITOR
+-- SCRIPT DE CONFIGURAÇÃO COMPLETO STMI (Para novos projetos)
 -- ==========================================================
 
--- 1. LIMPEZA (OPCIONAL - Cuidado: apaga dados existentes)
-drop table if exists comments;
-drop table if exists tasks;
-drop table if exists projects;
-drop table if exists profiles;
-
--- 2. TABELA DE USUÁRIOS (PERFIS)
-create table profiles (
+-- 1. TABELA DE USUÁRIOS (PERFIS)
+create table if not exists profiles (
   id uuid primary key default gen_random_uuid(),
   username text unique not null,
   password text not null,
@@ -22,8 +22,8 @@ create table profiles (
   created_at timestamp with time zone default now()
 );
 
--- 3. TABELA DE PROJETOS
-create table projects (
+-- 2. TABELA DE PROJETOS
+create table if not exists projects (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   description text,
@@ -36,20 +36,21 @@ create table projects (
   updated_at timestamp with time zone default now()
 );
 
--- 4. TABELA DE TAREFAS (CHECKLIST COM RIs)
-create table tasks (
+-- 3. TABELA DE TAREFAS (CHECKLIST COM RIs)
+create table if not exists tasks (
   id uuid primary key default gen_random_uuid(),
   project_id uuid references projects(id) on delete cascade,
   title text not null,
   completed boolean default false,
   stage text,
   responsible_id uuid references profiles(id),
+  observations text default '', -- Coluna para observações técnicas
   completed_at timestamp with time zone,
   created_at timestamp with time zone default now()
 );
 
--- 5. TABELA DE COMUNICAÇÃO (MENSAGENS/COMENTÁRIOS)
-create table comments (
+-- 4. TABELA DE COMUNICAÇÃO (MENSAGENS/COMENTÁRIOS)
+create table if not exists comments (
   id uuid primary key default gen_random_uuid(),
   project_id uuid references projects(id) on delete cascade,
   author_id uuid references profiles(id),
@@ -58,26 +59,15 @@ create table comments (
   created_at timestamp with time zone default now()
 );
 
--- 6. HABILITAR REALTIME (IMPORTANTE PARA O CHAT)
+-- 5. HABILITAR REALTIME
 begin;
   drop publication if exists supabase_realtime;
   create publication supabase_realtime;
 commit;
 alter publication supabase_realtime add table projects, tasks, comments;
 
--- 7. INSERIR USUÁRIOS PADRÃO (LOGIN)
--- Admin: admin / 123
-insert into profiles (username, password, name, role, is_admin)
-values ('admin', '123', 'Eng. Roberto Almeida', 'Coordenador Geral', true);
-
--- Técnico: ri_joao / 123
-insert into profiles (username, password, name, role, is_admin)
-values ('ri_joao', '123', 'João Silva (RI)', 'Técnico de Campo', false);
-
--- 8. DESABILITAR RLS PARA TESTE INICIAL (FACILITA O DESENVOLVIMENTO)
+-- 6. DESABILITAR RLS PARA DESENVOLVIMENTO
 alter table profiles disable row level security;
 alter table projects disable row level security;
 alter table tasks disable row level security;
 alter table comments disable row level security;
-
--- FIM DO SCRIPT

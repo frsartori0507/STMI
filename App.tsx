@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Project, User, ProjectStatus, AgendaItem, Task } from './types';
 import { STATUS_COLORS } from './constants';
@@ -20,11 +19,7 @@ const App: React.FC = () => {
   const [agenda, setAgenda] = useState<AgendaItem[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   
-  // Modais
   const [modalProject, setModalProject] = useState(false);
-  const [modalUser, setModalUser] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  
   const [chatMsg, setChatMsg] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -99,20 +94,26 @@ const App: React.FC = () => {
       await db.saveProject({ ...selectedProject, tasks: updatedTasks });
       await loadData();
     } catch (err: any) {
-      alert("Erro ao atualizar tarefa: " + (err.message || "Erro desconhecido"));
+      alert("Erro na atualização do checklist: " + (err.message || "Erro de conexão."));
     }
   };
 
   const handleTaskObservation = async (taskId: string, obs: string) => {
     if (!selectedProject) return;
+    
+    const task = selectedProject.tasks.find(t => t.id === taskId);
+    if (task && task.observations === obs) return;
+
     const updatedTasks = selectedProject.tasks.map(t => 
       t.id === taskId ? { ...t, observations: obs } : t
     );
+    
     try {
       await db.saveProject({ ...selectedProject, tasks: updatedTasks });
       await loadData();
     } catch (err: any) {
       console.error("Erro ao salvar observação:", err.message);
+      alert("⚠️ Aviso: Não foi possível salvar a observação. " + (err.message || ""));
     }
   };
 
@@ -124,7 +125,9 @@ const App: React.FC = () => {
       setModalProject(false);
     } catch (err: any) {
       console.error("Erro ao salvar projeto:", err);
-      alert("Falha no Banco de Dados: " + (err.message || "Verifique a estrutura do projeto."));
+      // Garante que err.message seja usado para evitar [object Object]
+      const msg = err.message || "Ocorreu um erro inesperado no banco de dados.";
+      alert("❌ Erro ao Salvar:\n\n" + msg);
     }
   };
 
@@ -139,7 +142,7 @@ const App: React.FC = () => {
   };
 
   if (loading) return (
-    <div className="h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+    <div className="h-screen flex flex-col items-center justify-center bg-slate-50 gap-4 text-left">
       <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
       <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Sincronizando STMI...</p>
     </div>
@@ -173,7 +176,7 @@ const App: React.FC = () => {
         <div className="mt-auto p-6 border-t border-slate-100">
            <div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-3 border border-slate-100">
              <img src={currentUser.avatar} className="w-9 h-9 rounded-xl border-2 border-white" alt="" />
-             <div className="flex-1 min-w-0">
+             <div className="flex-1 min-w-0 text-left">
                <div className="text-[10px] font-black text-slate-900 truncate">{currentUser.name}</div>
                <button onClick={handleLogout} className="text-[8px] text-red-500 font-black uppercase hover:underline">Sair do Sistema</button>
              </div>
@@ -185,7 +188,7 @@ const App: React.FC = () => {
         <header className="h-20 bg-white border-b border-slate-100 flex items-center justify-between px-10 shrink-0">
           <div className="flex items-center gap-6">
             {selectedProject && <button onClick={() => setSelectedProjectId(null)} className="p-2 text-slate-400 hover:text-blue-600 rounded-xl transition-all"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="3" d="M15 19l-7-7 7-7"/></svg></button>}
-            <div className="flex flex-col">
+            <div className="flex flex-col text-left">
                <h2 className="text-xl font-black text-slate-900 tracking-tight">{selectedProject ? selectedProject.title : activeView.toUpperCase()}</h2>
                {selectedProject && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{selectedProject.neighborhood || 'GERAL'}</p>}
             </div>
@@ -243,7 +246,6 @@ const App: React.FC = () => {
                             <span className="text-[9px] font-black text-slate-300 bg-slate-50 px-3 py-1.5 rounded-xl uppercase tracking-widest">{task.stage}</span>
                           </div>
                           
-                          {/* CAMPO DE NOTAS APARECE PARA O RI INSERIR DETALHES DE CAMPO */}
                           <div className="mt-4 ml-11 flex items-start gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100 focus-within:bg-white focus-within:border-blue-200 transition-all">
                              <svg className="w-3.5 h-3.5 text-slate-300 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="3" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                              <textarea 

@@ -113,14 +113,13 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, on
         
         <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
-            {/* COLUNA ESQUERDA - INFORMAÇÕES E GOVERNANÇA */}
+            {/* COLUNA ESQUERDA - INFOS */}
             <div className="space-y-12 text-left">
               <section className="space-y-8">
                 <div className="flex items-center gap-4">
                    <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center font-black">1</div>
                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">INFORMAÇÕES ESSENCIAIS</h3>
                 </div>
-                
                 <div className="space-y-6">
                    <div>
                      <label className="block text-[11px] font-black text-slate-400 uppercase mb-2 tracking-widest ml-1">NOME DA OBRA / PROJETOS</label>
@@ -165,18 +164,18 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, on
               </section>
             </div>
 
-            {/* COLUNA DIREITA - CRONOGRAMA DE TAREFAS */}
+            {/* COLUNA DIREITA - CHECKLIST */}
             <div className="bg-[#f1f5f9] p-10 rounded-[3rem] border border-slate-200 flex flex-col shadow-inner max-h-[70vh]">
               <div className="flex items-center gap-4 mb-8">
                 <div className="w-10 h-10 bg-blue-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-blue-100">3</div>
-                <h3 className="text-xs font-black text-slate-800 uppercase tracking-[0.2em]">CRONOGRAMA DE TAREFAS (PROPORCIONAL)</h3>
+                <h3 className="text-xs font-black text-slate-800 uppercase tracking-[0.2em]">CRONOGRAMA DE TAREFAS</h3>
               </div>
               
               <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 mb-10 space-y-6">
                  <input 
                     value={newTaskTitle} 
                     onChange={(e) => setNewTaskTitle(e.target.value)} 
-                    placeholder="O que precisa ser feito?" 
+                    placeholder="Título da tarefa..." 
                     className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-[1.2rem] text-sm font-bold outline-none focus:bg-white focus:border-blue-500 transition-all" 
                  />
                  
@@ -194,7 +193,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, on
                     onClick={addTask} 
                     className="w-full py-5 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-[1.2rem] text-[11px] font-black uppercase tracking-[0.2em] shadow-[0_8px_20px_rgba(37,99,235,0.3)] hover:from-blue-700 transition-all active:scale-[0.98]"
                  >
-                    VINCULAR ATIVIDADE À OBRA
+                    ADICIONAR TAREFA
                  </button>
               </div>
 
@@ -205,9 +204,8 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, on
                        <div key={stage} className="space-y-4">
                           <div className="flex items-center justify-between px-2">
                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{stage}</span>
-                             <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-3 py-1 rounded-lg uppercase">{stageTasks.length} ATIVOS</span>
+                             <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-3 py-1 rounded-lg uppercase">{stageTasks.length} TAREFAS</span>
                           </div>
-                          
                           <div className="space-y-3">
                              {stageTasks.map(t => (
                                 <div key={t.id} className="group flex flex-col p-5 bg-white border border-slate-200 rounded-[1.8rem] hover:border-blue-400 transition-all shadow-sm">
@@ -222,11 +220,6 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, on
                                    </div>
                                 </div>
                              ))}
-                             {stageTasks.length === 0 && (
-                                <div className="p-10 border-2 border-dashed border-slate-200 rounded-[2rem] text-center text-[10px] font-black text-slate-300 uppercase tracking-widest bg-white/50">
-                                   AGUARDANDO DEFINIÇÃO
-                                </div>
-                             )}
                           </div>
                        </div>
                     );
@@ -245,7 +238,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, on
                 className="px-8 py-4 text-red-500 font-black uppercase text-[10px] tracking-widest hover:bg-red-50 rounded-2xl transition-all flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="3" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                EXCLUIR OBRA
+                EXCLUIR OBRA PERMANENTEMENTE
               </button>
             )}
           </div>
@@ -255,7 +248,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, on
               onClick={handleSubmit} 
               className="px-16 py-5 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-black uppercase text-[11px] tracking-[0.2em] rounded-[1.2rem] shadow-xl shadow-blue-100 hover:scale-[1.02] active:scale-95 transition-all"
             >
-              SALVAR E PUBLICAR OBRA
+              SALVAR ALTERAÇÕES
             </button>
           </div>
         </footer>
